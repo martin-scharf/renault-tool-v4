@@ -134,6 +134,19 @@ tr:hover td { background:rgba(245,197,24,.03); }
 .toast { position:fixed; bottom:24px; right:24px; background:var(--green); color:#000; padding:12px 20px; border-radius:8px; font-size:13px; font-weight:600; z-index:999; opacity:0; transform:translateY(10px); transition:all .3s; }
 .toast.show { opacity:1; transform:translateY(0); }
 
+/* ROW STATUS */
+tr.row-problem td { background:rgba(248,113,113,.08); }
+tr.row-problem:hover td { background:rgba(248,113,113,.14); }
+tr.row-ok td { }
+tr.row-unknown td { background:rgba(251,146,60,.05); }
+tr.row-unknown:hover td { background:rgba(251,146,60,.1); }
+.code-label { display:inline-flex; align-items:center; gap:6px; }
+.code-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
+.code-dot.green { background:var(--green); }
+.code-dot.red { background:var(--red); }
+.code-dot.orange { background:var(--orange); }
+.code-dot.gray { background:var(--text2); }
+
 /* FOOTER */
 footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); border-top:1px solid var(--border); margin-top:40px; }
 </style>
@@ -234,10 +247,34 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
 
     <!-- BESTELLUNG -->
     <div class="panel" id="panel-bestellung">
+      <div class="match-summary" id="order-summary" style="display:none;">
+        <div class="card">
+          <h3>Positionen</h3>
+          <div class="num accent" id="order-sum-total">0</div>
+        </div>
+        <div class="card">
+          <h3>Gültig</h3>
+          <div class="num green" id="order-sum-ok">0</div>
+        </div>
+        <div class="card">
+          <h3>Problematisch</h3>
+          <div class="num red" id="order-sum-problem">0</div>
+        </div>
+        <div class="card">
+          <h3>Nicht in Stammdaten</h3>
+          <div class="num orange" id="order-sum-unknown">0</div>
+        </div>
+      </div>
       <div class="table-wrap">
         <div class="table-header">
-          <h2>Kundenbestellung</h2>
+          <h2>Kundenbestellung — Gültigkeitsprüfung</h2>
           <div class="search-bar">
+            <select id="filter-order" onchange="renderOrderTable()">
+              <option value="all">Alle</option>
+              <option value="ok">Nur Gültige</option>
+              <option value="problem">Nur Problematische</option>
+              <option value="unknown">Nicht in Stammdaten</option>
+            </select>
             <input type="text" id="search-order" placeholder="Suche..." oninput="renderOrderTable()">
             <span class="count" id="count-order-tbl"></span>
           </div>
@@ -396,6 +433,7 @@ function loadStammdaten(file) {
       document.getElementById('count-stamm').textContent = stammData.length.toLocaleString('de');
       document.getElementById('detail-stamm').textContent = 'RDAGTK Datei: ' + file.name;
       renderStammTable();
+      if (orderData.length) renderOrderTable(); // Re-render Bestellung with validity
       toast(stammData.length.toLocaleString('de') + ' Stammdaten geladen');
     } catch (err) {
       document.getElementById('status-stamm').className = 'status err';
@@ -509,27 +547,83 @@ function renderStammTable() {
   </table>${filtered.length > 500 ? '<div style="padding:12px;text-align:center;color:var(--text2);font-size:12px;">Zeige 500 von ' + filtered.length.toLocaleString('de') + '</div>' : ''}`;
 }
 
+// Teile-Code Beschreibungen
+const TEILE_CODES = {
+  '':  { label: 'Gültig', color: 'green', cls: 'row-ok' },
+  '1': { label: 'Austauschbar mit Folgenummer', color: 'orange', cls: 'row-problem' },
+  '2': { label: 'Wird ersetzt durch Folgenummer', color: 'red', cls: 'row-problem' },
+  '3': { label: 'Nicht mehr lieferbar', color: 'red', cls: 'row-problem' },
+  '4': { label: 'Gesperrt, wird später geliefert', color: 'orange', cls: 'row-problem' }
+};
+
+function getOrderValidity(order) {
+  const ref = normalizeRef(order.ref);
+  const stamm = stammMap[ref];
+  if (!stamm) return { status: 'unknown', label: 'Nicht in Stammdaten', color: 'gray', cls: 'row-unknown', austausch: '', code: '' };
+  const code = stamm.code || '';
+  const info = TEILE_CODES[code] || TEILE_CODES[''];
+  return { status: code ? 'problem' : 'ok', ...info, austausch: stamm.austausch || '', code };
+}
+
 function renderOrderTable() {
   const wrap = document.getElementById('order-table-wrap');
   if (!orderData.length) return;
+
   const q = (document.getElementById('search-order').value || '').toLowerCase();
-  const filtered = q ? orderData.filter(r =>
+  const filter = document.getElementById('filter-order')?.value || 'all';
+  const hasStamm = stammData.length > 0;
+
+  // Enrich order data with validity
+  let enriched = orderData.map(r => ({ ...r, validity: hasStamm ? getOrderValidity(r) : null }));
+
+  // Filter
+  if (filter === 'ok') enriched = enriched.filter(r => r.validity?.status === 'ok');
+  else if (filter === 'problem') enriched = enriched.filter(r => r.validity?.status === 'problem');
+  else if (filter === 'unknown') enriched = enriched.filter(r => r.validity?.status === 'unknown');
+
+  if (q) enriched = enriched.filter(r =>
     r.ref.toLowerCase().includes(q) || r.beschreibung.toLowerCase().includes(q) || r.postRef.toLowerCase().includes(q)
-  ) : orderData;
-  document.getElementById('count-order-tbl').textContent = filtered.length + ' / ' + orderData.length;
+  );
+
+  document.getElementById('count-order-tbl').textContent = enriched.length + ' / ' + orderData.length;
+
+  // Summary cards
+  if (hasStamm) {
+    const allEnriched = orderData.map(r => getOrderValidity(r));
+    const okCount = allEnriched.filter(v => v.status === 'ok').length;
+    const problemCount = allEnriched.filter(v => v.status === 'problem').length;
+    const unknownCount = allEnriched.filter(v => v.status === 'unknown').length;
+    document.getElementById('order-summary').style.display = 'grid';
+    document.getElementById('order-sum-total').textContent = orderData.length;
+    document.getElementById('order-sum-ok').textContent = okCount;
+    document.getElementById('order-sum-problem').textContent = problemCount;
+    document.getElementById('order-sum-unknown').textContent = unknownCount;
+  }
+
+  const stammCol = hasStamm;
   wrap.innerHTML = `<table>
     <thead><tr>
       <th>POST REF</th><th>Beschreibung</th><th class="text-center">Menge</th>
       <th>REF (Teilenr)</th><th class="text-right">Preis</th><th class="text-right">Gesamt</th>
+      ${stammCol ? '<th>Status</th><th>Teile-Code</th><th>Austausch-Nr</th>' : ''}
     </tr></thead>
-    <tbody>${filtered.map(r => `<tr>
-      <td class="mono">${r.postRef}</td>
-      <td>${r.beschreibung}</td>
-      <td class="text-center">${r.menge}</td>
-      <td class="mono">${r.ref}</td>
-      <td class="text-right mono">${fmt(r.preis)}</td>
-      <td class="text-right mono">${fmt(r.gesamt)}</td>
-    </tr>`).join('')}</tbody>
+    <tbody>${enriched.map(r => {
+      const v = r.validity;
+      const rowCls = v ? v.cls : '';
+      return `<tr class="${rowCls}">
+        <td class="mono">${r.postRef}</td>
+        <td>${r.beschreibung}</td>
+        <td class="text-center">${r.menge}</td>
+        <td class="mono">${r.ref}</td>
+        <td class="text-right mono">${fmt(r.preis)}</td>
+        <td class="text-right mono">${fmt(r.gesamt)}</td>
+        ${stammCol ? `
+          <td><span class="code-label"><span class="code-dot ${v.color}"></span>${v.label}</span></td>
+          <td class="text-center mono">${v.code || '—'}</td>
+          <td class="mono" style="color:${v.austausch ? 'var(--accent)' : 'var(--text2)'}">${v.austausch || '—'}</td>
+        ` : ''}
+      </tr>`;
+    }).join('')}</tbody>
   </table>`;
 }
 
