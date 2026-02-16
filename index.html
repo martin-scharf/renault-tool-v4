@@ -599,6 +599,44 @@ const CATEGORY_META = {
 
 let enrichedOrderData = [];
 
+function lookupStamm(ref) {
+  const r = normalizeRef(ref);
+  return stammMap[r] || stammMap[r.replace(/^0+/, '')] || null;
+}
+
+function buildOrderRow(r, showAustausch) {
+  let extra = '';
+  if (showAustausch) {
+    if (r.validity.austausch) {
+      const neuStamm = lookupStamm(r.validity.austausch);
+      const altStamm = lookupStamm(r.ref);
+      const altPreis = altStamm ? altStamm.brutto : 0;
+      const neuPreis = neuStamm ? neuStamm.brutto : 0;
+      const neuBez = neuStamm ? neuStamm.bezeichnung : '—';
+      const diff = neuPreis - altPreis;
+      const diffColor = diff > 0.01 ? 'var(--red)' : diff < -0.01 ? 'var(--green)' : 'var(--text2)';
+      const diffPrefix = diff > 0 ? '+' : '';
+      const hasBoth = altPreis > 0 && neuPreis > 0;
+      extra = '<td class="mono" style="color:var(--accent);font-weight:600">' + r.validity.austausch + '</td>'
+        + '<td>' + neuBez + '</td>'
+        + '<td class="text-right mono">' + (altPreis ? fmt(altPreis) : '—') + '</td>'
+        + '<td class="text-right mono">' + (neuPreis ? fmt(neuPreis) : '—') + '</td>'
+        + '<td class="text-right mono" style="color:' + diffColor + ';font-weight:600">' + (hasBoth ? diffPrefix + fmt(diff) : '—') + '</td>';
+    } else {
+      extra = '<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>';
+    }
+  }
+  return '<tr class="' + r.validity.rowCls + '">'
+    + '<td class="mono">' + r.postRef + '</td>'
+    + '<td>' + r.beschreibung + '</td>'
+    + '<td class="text-center">' + r.menge + '</td>'
+    + '<td class="mono">' + r.ref + '</td>'
+    + '<td class="text-right mono">' + fmt(r.preis) + '</td>'
+    + '<td class="text-right mono">' + fmt(r.gesamt) + '</td>'
+    + '<td class="text-center"><span class="code-label"><span class="code-dot ' + r.validity.dotCls + '"></span>' + (r.validity.code || '—') + '</span></td>'
+    + extra + '</tr>';
+}
+
 function getOrderValidity(order) {
   const ref = normalizeRef(order.ref);
   let stamm = stammMap[ref];
@@ -658,18 +696,9 @@ function renderOrderTable() {
               <th>POST REF</th><th>Beschreibung</th><th class="text-center">Menge</th>
               <th>REF (Teilenr)</th><th class="text-right">Preis</th><th class="text-right">Gesamt</th>
               <th>Teile-Code</th>
-              ${showAustausch ? '<th>Austausch-/Ersatz-Nr</th>' : ''}
+              ${showAustausch ? '<th>Neue Nr</th><th>Neue Bezeichnung</th><th class="text-right">Alter Brutto</th><th class="text-right">Neuer Brutto</th><th class="text-right">Differenz</th>' : ''}
             </tr></thead>
-            <tbody>${items.map(r => `<tr class="${r.validity.rowCls}">
-              <td class="mono">${r.postRef}</td>
-              <td>${r.beschreibung}</td>
-              <td class="text-center">${r.menge}</td>
-              <td class="mono">${r.ref}</td>
-              <td class="text-right mono">${fmt(r.preis)}</td>
-              <td class="text-right mono">${fmt(r.gesamt)}</td>
-              <td class="text-center"><span class="code-label"><span class="code-dot ${r.validity.dotCls}"></span>${r.validity.code || '—'}</span></td>
-              ${showAustausch ? `<td class="mono" style="color:var(--accent);font-weight:600">${r.validity.austausch || '—'}</td>` : ''}
-            </tr>`).join('')}</tbody>
+            <tbody>${items.map(r => buildOrderRow(r, showAustausch)).join('')}</tbody>
           </table>
         </div>
       </div>
@@ -684,17 +713,28 @@ function exportOrderExcel(category) {
   const items = category === 'all' ? enrichedOrderData : enrichedOrderData.filter(r => r.validity.category === category);
   if (!items.length) { toast('Keine Einträge in dieser Rubrik'); return; }
 
-  const rows = items.map(r => ({
-    'POST REF': r.postRef,
-    'Beschreibung': r.beschreibung,
-    'Menge': r.menge,
-    'REF (Teilenr)': r.ref,
-    'Preis': r.preis,
-    'Gesamt': r.gesamt,
-    'Teile-Code': r.validity.code || '',
-    'Status': r.validity.label,
-    'Austausch-Nr': r.validity.austausch || ''
-  }));
+  const rows = items.map(r => {
+    const row = {
+      'POST REF': r.postRef,
+      'Beschreibung': r.beschreibung,
+      'Menge': r.menge,
+      'REF (Teilenr)': r.ref,
+      'Preis': r.preis,
+      'Gesamt': r.gesamt,
+      'Teile-Code': r.validity.code || '',
+      'Status': r.validity.label,
+    };
+    if (r.validity.austausch) {
+      const neuStamm = lookupStamm(r.validity.austausch);
+      const altStamm = lookupStamm(r.ref);
+      row['Austausch-Nr'] = r.validity.austausch;
+      row['Neue Bezeichnung'] = neuStamm ? neuStamm.bezeichnung : '';
+      row['Alter Brutto'] = altStamm ? altStamm.brutto : '';
+      row['Neuer Brutto'] = neuStamm ? neuStamm.brutto : '';
+      if (altStamm && neuStamm) row['Differenz'] = neuStamm.brutto - altStamm.brutto;
+    }
+    return row;
+  });
 
   const ws = XLSX.utils.json_to_sheet(rows);
 
