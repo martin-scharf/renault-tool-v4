@@ -77,6 +77,7 @@ main { max-width:1400px; margin:0 auto; padding:28px 32px; }
 .upload-box .status.ok { color:var(--green); }
 .upload-box .status.err { color:var(--red); }
 .upload-box input[type=file] { display:none; }
+.upload-box.dragover { border-color:var(--accent); background:var(--surface2); transform:scale(1.02); }
 
 /* TABLE */
 .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
@@ -352,6 +353,19 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
 <div class="toast" id="toast"></div>
 
 <script>
+// ── DRAG & DROP ──
+function setupDrop(boxId, handler) {
+  const box = document.getElementById(boxId);
+  ['dragenter','dragover'].forEach(ev => box.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); box.classList.add('dragover'); }));
+  ['dragleave','drop'].forEach(ev => box.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); box.classList.remove('dragover'); }));
+  box.addEventListener('drop', e => { if (e.dataTransfer.files.length) handler(e.dataTransfer.files[0]); });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  setupDrop('box-stamm', loadStammdaten);
+  setupDrop('box-order', loadBestellung);
+  setupDrop('box-css', loadCssData);
+});
+
 // ── AUTH ──
 function doLogin() {
   const u = document.getElementById('auth-user').value.trim();
