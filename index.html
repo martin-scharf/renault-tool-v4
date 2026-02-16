@@ -345,10 +345,15 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
 
       <div class="action-bar">
         <button class="btn btn-accent" onclick="runAbgleich()">Margenanalyse starten</button>
-        <button class="btn btn-outline" onclick="exportAbgleichExcel('all')">Alle als Excel</button>
-        <button class="btn" style="background:var(--orange);color:#000" onclick="exportAbgleichExcel('diff')">Nur Abweichungen</button>
-        <button class="btn" style="background:var(--red);color:#000" onclick="exportAbgleichExcel('negative')">Nur Verluste</button>
-        <button class="btn btn-outline" onclick="exportAbgleichExcel('missing')">Nicht in CSS</button>
+        <div style="display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:12px;color:var(--text2);margin-right:4px">Export Filter:</span>
+          <button class="btn status-toggle active" data-status="ok" style="background:var(--green);color:#000" onclick="toggleStatus(this)">OK</button>
+          <button class="btn status-toggle active" data-status="gering" style="background:var(--orange);color:#000" onclick="toggleStatus(this)">GERING</button>
+          <button class="btn status-toggle active" data-status="verlust" style="background:var(--red);color:#fff" onclick="toggleStatus(this)">VERLUST</button>
+          <button class="btn status-toggle active" data-status="hoch" style="background:var(--purple);color:#fff" onclick="toggleStatus(this)">HOCH</button>
+          <button class="btn status-toggle active" data-status="fehlt" style="background:var(--border);color:var(--text1)" onclick="toggleStatus(this)">FEHLT</button>
+          <button class="btn btn-accent" onclick="exportAbgleichFiltered()" style="margin-left:8px">Excel Download</button>
+        </div>
         <span style="width:1px;height:24px;background:var(--border);display:inline-block;margin:0 6px"></span>
         <button class="btn" style="background:var(--purple);color:#fff" id="btn-css-query" onclick="startCssQuery()">CSS Warenwirtschaft abfragen</button>
         <span id="css-query-status" style="font-size:12px;color:var(--text2)"></span>
@@ -994,14 +999,47 @@ function renderMatchTable() {
 }
 
 // ── EXCEL EXPORT Margenanalyse ──
-function exportAbgleichExcel(filter) {
+function toggleStatus(btn) {
+  btn.classList.toggle('active');
+  if (!btn.classList.contains('active')) {
+    btn.style.opacity = '0.3';
+  } else {
+    btn.style.opacity = '1';
+  }
+}
+
+function getItemStatus(r) {
+  if (r.status === 'missing') return 'fehlt';
+  if (r.margePerUnit < 0) return 'verlust';
+  if (r.margePct < 10) return 'gering';
+  if (r.margePct > 50) return 'hoch';
+  return 'ok';
+}
+
+function exportAbgleichFiltered() {
+  if (!matchData.length) { toast('Erst Margenanalyse starten'); return; }
+  var active = [];
+  document.querySelectorAll('.status-toggle.active').forEach(function(b) {
+    active.push(b.getAttribute('data-status'));
+  });
+  if (!active.length) { toast('Mindestens einen Status auswählen'); return; }
+  var items = matchData.filter(function(r) { return active.indexOf(getItemStatus(r)) !== -1; });
+  if (!items.length) { toast('Keine Einträge für gewählte Filter'); return; }
+  exportAbgleichExcel('custom', items);
+}
+
+function exportAbgleichExcel(filter, customItems) {
   if (!matchData.length) { toast('Erst Margenanalyse starten'); return; }
 
-  var items = matchData;
+  var items;
   var suffix = 'Komplett';
-  if (filter === 'diff') { items = items.filter(function(r) { return r.css && !r.preisMatch; }); suffix = 'Preisabweichungen'; }
-  else if (filter === 'negative') { items = items.filter(function(r) { return r.margePerUnit < 0; }); suffix = 'Verluste'; }
-  else if (filter === 'missing') { items = items.filter(function(r) { return r.status === 'missing'; }); suffix = 'Nicht_in_CSS'; }
+  if (filter === 'custom' && customItems) { items = customItems; suffix = 'Auswahl'; }
+  else {
+    items = matchData;
+    if (filter === 'diff') { items = items.filter(function(r) { return r.css && !r.preisMatch; }); suffix = 'Preisabweichungen'; }
+    else if (filter === 'negative') { items = items.filter(function(r) { return r.margePerUnit < 0; }); suffix = 'Verluste'; }
+    else if (filter === 'missing') { items = items.filter(function(r) { return r.status === 'missing'; }); suffix = 'Nicht_in_CSS'; }
+  }
 
   if (!items.length) { toast('Keine Einträge für diesen Filter'); return; }
 
