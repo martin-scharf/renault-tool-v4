@@ -401,28 +401,32 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// ── PARSE RENAULT STAMMDATEN (Fixed-width 256) ──
+// ── PARSE RENAULT STAMMDATEN (Semikolon-getrennt) ──
+// Felder: 1=RDAGTK, 2=Version, 3=Datum, 4=Zeit, 5=Satzzähler, 6=Satzanzahl,
+// 7=Teilenummer, 8=Teile-Code, 9=Austausch-Nr, 10=Bezeichnung-1, 11=Bezeichnung-2,
+// 12=Brutto(Cent), 13=Währung, 14=MwSt-Code, 15=Nettopreis-Code,
+// 16=Rabattgruppe, 17=R1-Bonus, 18=Pfandwert, 19=VPE, 20=Gewicht(g),
+// 21=Volumen, 22=Familie, 23=Segment, ...
 function parseStammdaten(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.length >= 119);
+  const lines = text.split(/\r?\n/).filter(l => l.length > 10);
   const rows = [];
   for (const line of lines) {
-    if (line.substring(0, 6) !== 'RDAGTK') continue;
-    const teilenr = line.substring(40, 51).trim();
-    const code = line.substring(51, 53).trim();
-    const austausch = line.substring(53, 64).trim();
-    const bez1 = line.substring(64, 82).trim();
-    const bez2 = line.substring(82, 100).trim();
-    const bruttoStr = line.substring(100, 111).trim();
-    const brutto = bruttoStr ? parseInt(bruttoStr) / 100 : 0; // Cent -> Euro
-    const waehrung = line.substring(111, 115).trim();
-    const mwstCode = line.substring(115, 117).trim();
-    const nettoCode = line.substring(117, 119).trim();
-    let rabattgruppe = '', familie = '', gewicht = 0;
-    if (line.length >= 165) {
-      rabattgruppe = line.substring(119, 122).trim();
-      gewicht = parseInt(line.substring(139, 150).trim()) || 0;
-      familie = line.substring(161, 165).trim();
-    }
+    const f = line.split(';');
+    if (f[0] !== 'RDAGTK' || f.length < 16) continue;
+    const teilenr = (f[6] || '').trim();
+    if (!teilenr) continue;
+    const code = (f[7] || '').trim();
+    const austausch = (f[8] || '').trim();
+    const bez1 = (f[9] || '').trim();
+    const bez2 = (f[10] || '').trim();
+    const bruttoStr = (f[11] || '').trim();
+    const brutto = bruttoStr ? parseInt(bruttoStr) / 100 : 0;
+    const waehrung = (f[12] || '').trim();
+    const mwstCode = (f[13] || '').trim();
+    const nettoCode = (f[14] || '').trim();
+    const rabattgruppe = (f[15] || '').trim();
+    const gewicht = parseInt((f[19] || '').trim()) || 0;
+    const familie = (f[21] || '').trim();
     rows.push({
       teilenr, code, austausch,
       bezeichnung: (bez1 + ' ' + bez2).trim(),
