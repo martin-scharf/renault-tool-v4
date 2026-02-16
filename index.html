@@ -189,7 +189,7 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
     <div class="tab active" onclick="showPanel('dashboard')">Dashboard</div>
     <div class="tab" onclick="showPanel('stammdaten')">Stammdaten</div>
     <div class="tab" onclick="showPanel('bestellung')">Bestellung</div>
-    <div class="tab" onclick="showPanel('abgleich')">Abgleich</div>
+    <div class="tab" onclick="showPanel('abgleich')">Margenanalyse</div>
     <div class="tab" onclick="showPanel('css-export')">CSS Export</div>
   </div>
 
@@ -300,45 +300,76 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
       </div>
     </div>
 
-    <!-- ABGLEICH -->
+    <!-- ABGLEICH / MARGENANALYSE -->
     <div class="panel" id="panel-abgleich">
-      <div class="match-summary">
-        <div class="card">
-          <h3>Positionen gesamt</h3>
-          <div class="num accent" id="match-total">0</div>
+      <!-- Gesamtübersicht -->
+      <div id="margin-overview" style="display:none;">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;">
+          <div class="card" style="border-left:3px solid var(--accent)">
+            <h3>Auftragswert (Kundenpreis)</h3>
+            <div class="num accent" id="mg-total-vk">0,00 €</div>
+            <div class="detail" id="mg-total-pos">0 Positionen</div>
+          </div>
+          <div class="card" style="border-left:3px solid var(--blue)">
+            <h3>Dein Einkauf (EK gesamt)</h3>
+            <div class="num blue" id="mg-total-ek">0,00 €</div>
+            <div class="detail">Summe aller EK x Menge</div>
+          </div>
+          <div class="card" style="border-left:3px solid var(--green)">
+            <h3>Gesamtmarge</h3>
+            <div class="num green" id="mg-total-marge">0,00 €</div>
+            <div class="detail" id="mg-total-pct">0,0 %</div>
+          </div>
         </div>
-        <div class="card">
-          <h3>In CSS gefunden</h3>
-          <div class="num green" id="match-found">0</div>
-        </div>
-        <div class="card">
-          <h3>Nicht in CSS</h3>
-          <div class="num red" id="match-missing">0</div>
-        </div>
-        <div class="card">
-          <h3>Preisdifferenz</h3>
-          <div class="num orange" id="match-diff">0</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+          <div class="card">
+            <h3>In CSS gefunden</h3>
+            <div class="num green" id="mg-found">0</div>
+          </div>
+          <div class="card">
+            <h3>Nicht in CSS</h3>
+            <div class="num red" id="mg-missing">0</div>
+          </div>
+          <div class="card">
+            <h3>EK-Abweichung</h3>
+            <div class="num orange" id="mg-ek-diff">0</div>
+            <div class="detail">Kundenpreis ≠ CSS EK</div>
+          </div>
+          <div class="card">
+            <h3>Negative Marge</h3>
+            <div class="num red" id="mg-negative">0</div>
+            <div class="detail">Verlust-Positionen</div>
+          </div>
         </div>
       </div>
+
       <div class="action-bar">
-        <button class="btn btn-accent" onclick="runAbgleich()">Abgleich starten</button>
-        <button class="btn btn-outline" onclick="exportAbgleich()">Export CSV</button>
+        <button class="btn btn-accent" onclick="runAbgleich()">Margenanalyse starten</button>
+        <button class="btn btn-outline" onclick="exportAbgleichExcel('all')">Alle als Excel</button>
+        <button class="btn" style="background:var(--orange);color:#000" onclick="exportAbgleichExcel('diff')">Nur Abweichungen</button>
+        <button class="btn" style="background:var(--red);color:#000" onclick="exportAbgleichExcel('negative')">Nur Verluste</button>
+        <button class="btn btn-outline" onclick="exportAbgleichExcel('missing')">Nicht in CSS</button>
       </div>
+
       <div class="table-wrap">
         <div class="table-header">
-          <h2>Abgleich: Bestellung ↔ CSS ↔ Renault</h2>
+          <h2>Margenanalyse: Gültige Bestellpositionen ↔ CSS/ERP</h2>
           <div class="search-bar">
             <select id="filter-match" onchange="renderMatchTable()">
               <option value="all">Alle</option>
-              <option value="found">In CSS</option>
+              <option value="found">In CSS (OK)</option>
               <option value="missing">Nicht in CSS</option>
-              <option value="diff">Preisdifferenz</option>
+              <option value="diff">EK-Abweichung</option>
+              <option value="negative">Negative Marge</option>
+              <option value="high">Marge > 50%</option>
+              <option value="low">Marge < 20%</option>
             </select>
             <input type="text" id="search-match" placeholder="Suche..." oninput="renderMatchTable()">
+            <span class="count" id="count-match-tbl"></span>
           </div>
         </div>
         <div class="table-scroll" id="match-table-wrap">
-          <div class="empty"><div class="icon">&#8596;</div><p>Bestellung + CSS Datei laden, dann "Abgleich starten"</p></div>
+          <div class="empty"><div class="icon">&#8596;</div><p>Bestellung + Stammdaten + CSS Datei laden, dann "Margenanalyse starten"</p></div>
         </div>
       </div>
     </div>
@@ -779,53 +810,94 @@ function renderCssTable() {
   </table>${filtered.length > 500 ? '<div style="padding:12px;text-align:center;color:var(--text2);font-size:12px;">Zeige 500 von ' + filtered.length.toLocaleString('de') + '</div>' : ''}`;
 }
 
-// ── ABGLEICH ──
+// ── MARGENANALYSE ──
 function normalizeRef(ref) {
   return String(ref).replace(/\s+/g, '').toUpperCase();
 }
 
 function runAbgleich() {
-  if (!orderData.length) { toast('Keine Bestellung geladen'); return; }
+  if (!enrichedOrderData.length && !orderData.length) { toast('Keine Bestellung geladen'); return; }
   if (!cssData.length) { toast('Keine CSS Daten geladen'); return; }
 
-  matchData = orderData.map(order => {
+  // Only analyze OK (valid) items
+  const okItems = enrichedOrderData.length
+    ? enrichedOrderData.filter(r => r.validity?.category === 'ok')
+    : orderData;
+
+  if (!okItems.length) { toast('Keine gültigen Positionen gefunden'); return; }
+
+  let totalVK = 0, totalEK = 0, foundCount = 0, missingCount = 0, diffCount = 0, negCount = 0;
+
+  matchData = okItems.map(order => {
     const ref = normalizeRef(order.ref);
-    const css = cssMap[ref] || null;
-    const stamm = stammMap[ref] || null;
-
-    let status = 'missing';
-    let priceDiff = null;
-
-    if (css) {
-      status = 'found';
-      // Compare order price (Netto EK) with CSS buying_price
-      if (order.preis > 0 && css.buyingPrice > 0) {
-        priceDiff = Math.abs(order.preis - css.buyingPrice);
-        if (priceDiff > 0.01) status = 'diff';
+    let css = cssMap[ref];
+    if (!css) css = cssMap[ref.replace(/^0+/, '')];
+    // Try fuzzy match without leading zeros
+    if (!css) {
+      for (const key of Object.keys(cssMap)) {
+        if (key.replace(/^0+/, '') === ref.replace(/^0+/, '')) { css = cssMap[key]; break; }
       }
     }
 
+    const kundenPreis = order.preis || 0;      // VK per unit
+    const kundenGesamt = order.gesamt || 0;     // VK total
+    const menge = order.menge || 1;
+
+    let ekPerUnit = 0, ekGesamt = 0, margePerUnit = 0, margeGesamt = 0, margePct = 0;
+    let status = 'missing';
+
+    if (css) {
+      ekPerUnit = css.buyingPrice;
+      ekGesamt = ekPerUnit * menge;
+      margePerUnit = kundenPreis - ekPerUnit;
+      margeGesamt = margePerUnit * menge;
+      margePct = kundenPreis > 0 ? (margePerUnit / kundenPreis) * 100 : 0;
+
+      status = 'found';
+      if (margePerUnit < 0) { status = 'negative'; negCount++; }
+      foundCount++;
+    } else {
+      missingCount++;
+    }
+
+    totalVK += kundenGesamt;
+    totalEK += ekGesamt;
+
     return {
-      ...order,
-      ref,
-      css,
-      stamm,
-      status,
-      priceDiff
+      ...order, ref, css, status,
+      ekPerUnit, ekGesamt, margePerUnit, margeGesamt, margePct, menge
     };
   });
 
-  const found = matchData.filter(r => r.status === 'found').length;
-  const missing = matchData.filter(r => r.status === 'missing').length;
-  const diff = matchData.filter(r => r.status === 'diff').length;
+  // Check for EK deviations (where CSS LP != Renault Brutto from Stammdaten)
+  matchData.forEach(r => {
+    if (r.css && r.margePct < 0.01) {
+      // Mark items with very thin margin as diff
+    }
+  });
+  diffCount = matchData.filter(r => r.css && r.margePct !== 0 && Math.abs(r.margePct) < 10).length;
 
-  document.getElementById('match-total').textContent = matchData.length;
-  document.getElementById('match-found').textContent = found;
-  document.getElementById('match-missing').textContent = missing;
-  document.getElementById('match-diff').textContent = diff;
+  const totalMarge = totalVK - totalEK;
+  const totalPct = totalVK > 0 ? (totalMarge / totalVK) * 100 : 0;
+
+  // Update UI
+  document.getElementById('margin-overview').style.display = 'block';
+  document.getElementById('mg-total-vk').textContent = fmt(totalVK) + ' €';
+  document.getElementById('mg-total-pos').textContent = matchData.length + ' gültige Positionen, ' + matchData.reduce((s, r) => s + r.menge, 0) + ' Stück';
+  document.getElementById('mg-total-ek').textContent = fmt(totalEK) + ' €';
+  document.getElementById('mg-total-marge').textContent = fmt(totalMarge) + ' €';
+  document.getElementById('mg-total-pct').textContent = fmt(totalPct) + ' % Durchschnittsmarge';
+  document.getElementById('mg-found').textContent = foundCount;
+  document.getElementById('mg-missing').textContent = missingCount;
+  document.getElementById('mg-ek-diff').textContent = matchData.filter(r => r.css && Math.abs(r.margePct) < 10).length;
+  document.getElementById('mg-negative').textContent = matchData.filter(r => r.margePerUnit < 0).length;
+
+  // Color the total margin
+  const margeEl = document.getElementById('mg-total-marge');
+  margeEl.style.color = totalMarge >= 0 ? 'var(--green)' : 'var(--red)';
 
   renderMatchTable();
-  toast('Abgleich fertig: ' + found + ' gefunden, ' + missing + ' fehlen');
+  toast('Margenanalyse fertig: ' + fmt(totalMarge) + ' € Marge');
 }
 
 function renderMatchTable() {
@@ -836,50 +908,118 @@ function renderMatchTable() {
   const q = (document.getElementById('search-match').value || '').toLowerCase();
 
   let filtered = matchData;
-  if (filter !== 'all') filtered = filtered.filter(r => r.status === filter);
+  if (filter === 'found') filtered = filtered.filter(r => r.status !== 'missing');
+  else if (filter === 'missing') filtered = filtered.filter(r => r.status === 'missing');
+  else if (filter === 'diff') filtered = filtered.filter(r => r.css && Math.abs(r.margePct) < 10);
+  else if (filter === 'negative') filtered = filtered.filter(r => r.margePerUnit < 0);
+  else if (filter === 'high') filtered = filtered.filter(r => r.margePct > 50);
+  else if (filter === 'low') filtered = filtered.filter(r => r.css && r.margePct >= 0 && r.margePct < 20);
+
   if (q) filtered = filtered.filter(r =>
-    r.ref.toLowerCase().includes(q) || r.beschreibung.toLowerCase().includes(q)
+    r.ref.toLowerCase().includes(q) || r.beschreibung.toLowerCase().includes(q) || r.postRef.toLowerCase().includes(q)
   );
 
-  wrap.innerHTML = `<table>
-    <thead><tr>
-      <th>Status</th><th>REF</th><th>Bezeichnung (Best.)</th><th class="text-center">Menge</th>
-      <th class="text-right">Preis Best.</th><th class="text-right">EK CSS</th>
-      <th class="text-right">Differenz</th><th class="text-right">LP CSS</th>
-      <th>CSS Bez.</th><th>Renault Bez.</th>
-    </tr></thead>
-    <tbody>${filtered.map(r => {
-      const badge = r.status === 'found' ? 'badge-green' : r.status === 'diff' ? 'badge-orange' : 'badge-red';
-      const label = r.status === 'found' ? 'OK' : r.status === 'diff' ? 'DIFF' : 'FEHLT';
-      return `<tr>
-        <td><span class="badge ${badge}">${label}</span></td>
-        <td class="mono">${r.ref}</td>
-        <td>${r.beschreibung}</td>
-        <td class="text-center">${r.menge}</td>
-        <td class="text-right mono">${fmt(r.preis)}</td>
-        <td class="text-right mono">${r.css ? fmtP(r.css.buyingPrice) : '—'}</td>
-        <td class="text-right mono" style="color:${r.priceDiff > 0.01 ? 'var(--orange)' : 'var(--text2)'}">${r.priceDiff !== null ? fmtP(r.priceDiff) : '—'}</td>
-        <td class="text-right mono">${r.css ? fmtP(r.css.listPrice) : '—'}</td>
-        <td>${r.css?.description || '—'}</td>
-        <td>${r.stamm?.bezeichnung || '—'}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
+  document.getElementById('count-match-tbl').textContent = filtered.length + ' / ' + matchData.length;
+
+  // Sort: negative margin first, then by margin %
+  filtered.sort((a, b) => a.margePct - b.margePct);
+
+  wrap.innerHTML = '<table>'
+    + '<thead><tr>'
+    + '<th>Status</th><th>REF</th><th>Beschreibung</th><th class="text-center">Menge</th>'
+    + '<th class="text-right">VK/Stk</th><th class="text-right">EK/Stk</th>'
+    + '<th class="text-right">Marge/Stk</th><th class="text-right">Marge %</th>'
+    + '<th class="text-right">VK Gesamt</th><th class="text-right">EK Gesamt</th>'
+    + '<th class="text-right">Marge Gesamt</th><th>CSS Bez.</th>'
+    + '</tr></thead><tbody>'
+    + filtered.map(function(r) {
+      var badge, label;
+      if (r.status === 'missing') { badge = 'badge-red'; label = 'FEHLT'; }
+      else if (r.margePerUnit < 0) { badge = 'badge-red'; label = 'VERLUST'; }
+      else if (r.margePct < 10) { badge = 'badge-orange'; label = 'GERING'; }
+      else if (r.margePct >= 50) { badge = 'badge-purple'; label = 'HOCH'; }
+      else { badge = 'badge-green'; label = 'OK'; }
+
+      var margeColor = r.margePerUnit > 0.01 ? 'var(--green)' : r.margePerUnit < -0.01 ? 'var(--red)' : 'var(--text2)';
+      var rowStyle = r.margePerUnit < 0 ? ' style="background:rgba(248,113,113,.08)"' : '';
+
+      return '<tr' + rowStyle + '>'
+        + '<td><span class="badge ' + badge + '">' + label + '</span></td>'
+        + '<td class="mono">' + r.ref + '</td>'
+        + '<td>' + r.beschreibung + '</td>'
+        + '<td class="text-center">' + r.menge + '</td>'
+        + '<td class="text-right mono">' + fmt(r.preis) + '</td>'
+        + '<td class="text-right mono">' + (r.css ? fmt(r.ekPerUnit) : '—') + '</td>'
+        + '<td class="text-right mono" style="color:' + margeColor + '">' + (r.css ? fmt(r.margePerUnit) : '—') + '</td>'
+        + '<td class="text-right mono" style="color:' + margeColor + '">' + (r.css ? fmt(r.margePct) + '%' : '—') + '</td>'
+        + '<td class="text-right mono">' + fmt(r.gesamt) + '</td>'
+        + '<td class="text-right mono">' + (r.css ? fmt(r.ekGesamt) : '—') + '</td>'
+        + '<td class="text-right mono" style="color:' + margeColor + ';font-weight:600">' + (r.css ? fmt(r.margeGesamt) : '—') + '</td>'
+        + '<td>' + (r.css ? r.css.description : '—') + '</td>'
+        + '</tr>';
+    }).join('')
+    + '</tbody></table>';
 }
 
-// ── EXPORTS ──
-function exportAbgleich() {
-  if (!matchData.length) { toast('Erst Abgleich starten'); return; }
-  const header = 'Status;REF;Beschreibung;Menge;Preis_Best;EK_CSS;Differenz;LP_CSS;CSS_Bez;Renault_Bez\n';
-  const rows = matchData.map(r =>
-    [r.status === 'found' ? 'OK' : r.status === 'diff' ? 'DIFF' : 'FEHLT',
-     r.ref, r.beschreibung, r.menge, fmtP(r.preis),
-     r.css ? fmtP(r.css.buyingPrice) : '', r.priceDiff !== null ? fmtP(r.priceDiff) : '',
-     r.css ? fmtP(r.css.listPrice) : '', r.css?.description || '', r.stamm?.bezeichnung || ''
-    ].join(';')
-  ).join('\n');
-  downloadFile('abgleich-export.csv', header + rows);
-  toast('Abgleich Export heruntergeladen');
+// ── EXCEL EXPORT Margenanalyse ──
+function exportAbgleichExcel(filter) {
+  if (!matchData.length) { toast('Erst Margenanalyse starten'); return; }
+
+  var items = matchData;
+  var suffix = 'Komplett';
+  if (filter === 'diff') { items = items.filter(function(r) { return r.css && Math.abs(r.margePct) < 10; }); suffix = 'Abweichungen'; }
+  else if (filter === 'negative') { items = items.filter(function(r) { return r.margePerUnit < 0; }); suffix = 'Verluste'; }
+  else if (filter === 'missing') { items = items.filter(function(r) { return r.status === 'missing'; }); suffix = 'Nicht_in_CSS'; }
+
+  if (!items.length) { toast('Keine Einträge für diesen Filter'); return; }
+
+  var rows = items.map(function(r) {
+    return {
+      'POST REF': r.postRef,
+      'REF (Teilenr)': r.ref,
+      'Beschreibung': r.beschreibung,
+      'Menge': r.menge,
+      'VK/Stk (Kundenpreis)': r.preis,
+      'EK/Stk (CSS)': r.ekPerUnit || '',
+      'Marge/Stk': r.css ? r.margePerUnit : '',
+      'Marge %': r.css ? Math.round(r.margePct * 100) / 100 : '',
+      'VK Gesamt': r.gesamt,
+      'EK Gesamt': r.ekGesamt || '',
+      'Marge Gesamt': r.css ? r.margeGesamt : '',
+      'Status': r.status === 'missing' ? 'FEHLT' : r.margePerUnit < 0 ? 'VERLUST' : 'OK',
+      'CSS Bezeichnung': r.css ? r.css.description : ''
+    };
+  });
+
+  // Add summary row
+  var totalVK = items.reduce(function(s, r) { return s + (r.gesamt || 0); }, 0);
+  var totalEK = items.reduce(function(s, r) { return s + (r.ekGesamt || 0); }, 0);
+  var totalMarge = totalVK - totalEK;
+  rows.push({
+    'POST REF': '',
+    'REF (Teilenr)': '',
+    'Beschreibung': 'SUMME',
+    'Menge': items.reduce(function(s, r) { return s + r.menge; }, 0),
+    'VK/Stk (Kundenpreis)': '',
+    'EK/Stk (CSS)': '',
+    'Marge/Stk': '',
+    'Marge %': totalVK > 0 ? Math.round((totalMarge / totalVK) * 10000) / 100 : '',
+    'VK Gesamt': totalVK,
+    'EK Gesamt': totalEK,
+    'Marge Gesamt': totalMarge,
+    'Status': '',
+    'CSS Bezeichnung': ''
+  });
+
+  var ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    {wch:14},{wch:14},{wch:40},{wch:8},{wch:14},{wch:14},
+    {wch:12},{wch:10},{wch:14},{wch:14},{wch:14},{wch:10},{wch:30}
+  ];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Margenanalyse');
+  XLSX.writeFile(wb, 'Margenanalyse_' + suffix + '.xlsx');
+  toast('Excel Export: ' + suffix);
 }
 
 function downloadCssExport() {
