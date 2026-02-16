@@ -25,7 +25,8 @@ export default async function handler(req, res) {
     }
     const body = Buffer.concat(chunks).toString('utf-8');
 
-    const response = await fetch('http://80.153.160.204:8080/dvse/Erp.asmx', {
+    const apiUrl = process.env.CSS_API_URL || 'http://80.153.160.204:8080/dvse/Erp.asmx';
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/soap+xml; charset=utf-8; action="DVSE.WebApp.ErpService/GetArticleInformation"',
