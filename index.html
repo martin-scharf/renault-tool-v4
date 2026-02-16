@@ -349,6 +349,9 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
         <button class="btn" style="background:var(--orange);color:#000" onclick="exportAbgleichExcel('diff')">Nur Abweichungen</button>
         <button class="btn" style="background:var(--red);color:#000" onclick="exportAbgleichExcel('negative')">Nur Verluste</button>
         <button class="btn btn-outline" onclick="exportAbgleichExcel('missing')">Nicht in CSS</button>
+        <span style="width:1px;height:24px;background:var(--border);display:inline-block;margin:0 6px"></span>
+        <button class="btn" style="background:var(--purple);color:#fff" id="btn-css-query" onclick="startCssQuery()">CSS Warenwirtschaft abfragen</button>
+        <span id="css-query-status" style="font-size:12px;color:var(--text2)"></span>
       </div>
 
       <div class="table-wrap">
@@ -932,6 +935,9 @@ function renderMatchTable() {
   // Sort: negative margin first, then by margin %
   filtered.sort((a, b) => a.margePct - b.margePct);
 
+  var hasCssLive = matchData.some(function(r) { return r.cssNr; });
+  var cssLiveHead = hasCssLive ? '<th>CSS-Nr</th><th class="text-right">CSS EK Live</th><th class="text-right">Bestand</th><th>Verfügbar</th>' : '';
+
   wrap.innerHTML = '<table>'
     + '<thead><tr>'
     + '<th>Status</th><th>REF</th><th>Beschreibung</th><th class="text-center">Menge</th>'
@@ -939,7 +945,9 @@ function renderMatchTable() {
     + '<th class="text-right">Dein EK</th>'
     + '<th class="text-right">Marge/Stk</th><th class="text-right">Marge %</th>'
     + '<th class="text-right">VK Gesamt</th><th class="text-right">EK Gesamt</th>'
-    + '<th class="text-right">Marge Gesamt</th><th>CSS Bez.</th>'
+    + '<th class="text-right">Marge Gesamt</th>'
+    + cssLiveHead
+    + '<th>CSS Bez.</th>'
     + '</tr></thead><tbody>'
     + filtered.map(function(r) {
       var badge, label;
@@ -956,7 +964,7 @@ function renderMatchTable() {
       var preisDiff = r.css ? r.preis - r.cssKdPreis : 0;
       var preisDiffStr = r.css ? (r.preisMatch ? 'OK' : (preisDiff > 0 ? '+' : '') + fmt(preisDiff)) : '—';
 
-      return '<tr' + rowStyle + '>'
+      var row = '<tr' + rowStyle + '>'
         + '<td><span class="badge ' + badge + '">' + label + '</span></td>'
         + '<td class="mono">' + r.ref + '</td>'
         + '<td>' + r.beschreibung + '</td>'
@@ -969,9 +977,18 @@ function renderMatchTable() {
         + '<td class="text-right mono" style="color:' + margeColor + '">' + (r.css ? fmt(r.margePct) + '%' : '—') + '</td>'
         + '<td class="text-right mono">' + fmt(r.gesamt) + '</td>'
         + '<td class="text-right mono">' + (r.css ? fmt(r.ekGesamt) : '—') + '</td>'
-        + '<td class="text-right mono" style="color:' + margeColor + ';font-weight:600">' + (r.css ? fmt(r.margeGesamt) : '—') + '</td>'
-        + '<td>' + (r.css ? r.css.description : '—') + '</td>'
+        + '<td class="text-right mono" style="color:' + margeColor + ';font-weight:600">' + (r.css ? fmt(r.margeGesamt) : '—') + '</td>';
+      if (hasCssLive) {
+        var verfMap = { verfuegbar: 'Ja', nichtverfuegbar: 'Nein', unbekannt: '?', teilvefuergbar: 'Teilw.', nichtmehrlieferbar: 'N.m.l.', nochnichtangefragt: '-' };
+        var verfColor = r.cssVerfuegbar === 'verfuegbar' ? 'var(--green)' : r.cssVerfuegbar === 'nichtverfuegbar' || r.cssVerfuegbar === 'nichtmehrlieferbar' ? 'var(--red)' : 'var(--text2)';
+        row += '<td class="mono">' + (r.cssNr || '—') + '</td>'
+          + '<td class="text-right mono">' + (r.cssEkLive ? fmt(r.cssEkLive) : '—') + '</td>'
+          + '<td class="text-right mono">' + (r.cssBestand !== undefined ? r.cssBestand : '—') + '</td>'
+          + '<td style="color:' + verfColor + '">' + (verfMap[r.cssVerfuegbar] || r.cssVerfuegbar || '—') + '</td>';
+      }
+      row += '<td>' + (r.css ? r.css.description : '—') + '</td>'
         + '</tr>';
+      return row;
     }).join('')
     + '</tbody></table>';
 }
@@ -1005,6 +1022,10 @@ function exportAbgleichExcel(filter) {
       'EK Gesamt': r.ekGesamt || '',
       'Marge Gesamt': r.css ? r.margeGesamt : '',
       'Status': r.status === 'missing' ? 'FEHLT' : r.margePerUnit < 0 ? 'VERLUST' : 'OK',
+      'CSS-Nr (WaWi)': r.cssNr || '',
+      'CSS EK Live': r.cssEkLive || '',
+      'Bestand': r.cssBestand !== undefined ? r.cssBestand : '',
+      'Verfügbar': r.cssVerfuegbar || '',
       'CSS Bezeichnung': r.css ? r.css.description : ''
     };
   });
@@ -1038,6 +1059,165 @@ function exportAbgleichExcel(filter) {
   XLSX.utils.book_append_sheet(wb, ws, 'Margenanalyse');
   XLSX.writeFile(wb, 'Margenanalyse_' + suffix + '.xlsx');
   toast('Excel Export: ' + suffix);
+}
+
+// ── CSS WARENWIRTSCHAFT ABFRAGE (SOAP) ──
+var CSS_ENDPOINT = 'http://80.153.160.204:8080/dvse/Erp.asmx';
+var CSS_CUSTOMER_ID = '1344';
+var CSS_CUSTOMER_ID2 = '866';
+var CSS_DLNR = '7455';
+var CSS_BATCH_SIZE = 30;
+var CSS_CORS_PROXY = 'https://corsproxy.io/?';
+
+function buildCssSoapRequest(articles) {
+  var itemsXml = articles.map(function(ref) {
+    return '<Item>'
+      + '<EinspNr>' + CSS_DLNR + '</EinspNr>'
+      + '<EinspArtNr>' + ref + '</EinspArtNr>'
+      + '<GenericPartNr>0</GenericPartNr>'
+      + '<TecdocTypeNr>0</TecdocTypeNr>'
+      + '<Type>0</Type>'
+      + '<AvailState>nochnichtangefragt</AvailState>'
+      + '<RequestedQuantity><Value>1</Value></RequestedQuantity>'
+      + '</Item>';
+  }).join('');
+
+  return '<?xml version="1.0" encoding="utf-8"?>'
+    + '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+    + '<soap12:Body>'
+    + '<GetArticleInformation xmlns="DVSE.WebApp.ErpService">'
+    + '<user><CustomerId>' + CSS_CUSTOMER_ID + '</CustomerId><CustomerId2>' + CSS_CUSTOMER_ID2 + '</CustomerId2><UserName></UserName><PassWord></PassWord></user>'
+    + '<items><Item>' + itemsXml + '</Item></items>'
+    + '</GetArticleInformation>'
+    + '</soap12:Body></soap12:Envelope>';
+}
+
+function parseCssResponse(xmlText) {
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(xmlText, 'text/xml');
+  var ns = 'DVSE.WebApp.ErpService';
+  var results = {};
+
+  // Get all Item elements from response
+  var items = doc.getElementsByTagNameNS(ns, 'Item');
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var artNr = item.getElementsByTagNameNS(ns, 'ArtikelNummer');
+    var einspArtNr = item.getElementsByTagNameNS(ns, 'EinspArtNr');
+    var availState = item.getElementsByTagNameNS(ns, 'AvailState');
+
+    if (!einspArtNr.length) continue;
+    var ref = einspArtNr[0].textContent.trim().toUpperCase();
+
+    var cssNr = artNr.length ? artNr[0].textContent.trim() : '';
+    var avail = availState.length ? availState[0].textContent.trim() : '';
+
+    // Parse prices
+    var ekPreis = 0, vkPreis = 0;
+    var prices = item.getElementsByTagNameNS(ns, 'Price');
+    for (var p = 0; p < prices.length; p++) {
+      var priceCode = prices[p].getElementsByTagNameNS(ns, 'PriceCode');
+      var priceValue = prices[p].getElementsByTagNameNS(ns, 'Value');
+      if (priceCode.length && priceValue.length) {
+        var code = priceCode[0].textContent.trim();
+        var val = parseFloat(priceValue[0].textContent) || 0;
+        if (code === '4') ekPreis = val;  // EK per Stück
+        if (code === '5') vkPreis = val;  // VK per Stück
+      }
+    }
+
+    // Parse quantity (stock)
+    var bestand = 0;
+    var quantities = item.getElementsByTagNameNS(ns, 'Quantity');
+    for (var q = 0; q < quantities.length; q++) {
+      // Skip RequestedQuantity
+      if (quantities[q].parentElement && quantities[q].parentElement.localName === 'Quantity') {
+        var qVal = quantities[q].getElementsByTagNameNS(ns, 'Value');
+        if (qVal.length) bestand = parseFloat(qVal[0].textContent) || 0;
+      }
+    }
+
+    results[ref] = {
+      cssNr: cssNr,
+      cssEk: ekPreis,
+      cssVk: vkPreis,
+      cssBestand: bestand,
+      cssVerfuegbar: avail
+    };
+  }
+  return results;
+}
+
+var cssQueryRunning = false;
+
+async function startCssQuery() {
+  if (cssQueryRunning) { toast('Abfrage läuft bereits...'); return; }
+  if (!matchData.length) { toast('Erst Margenanalyse starten'); return; }
+
+  cssQueryRunning = true;
+  var btn = document.getElementById('btn-css-query');
+  var statusEl = document.getElementById('css-query-status');
+  btn.disabled = true;
+  btn.textContent = 'Abfrage läuft...';
+
+  // Collect all unique REFs from matchData
+  var allRefs = matchData.map(function(r) { return r.ref; }).filter(function(r) { return r; });
+  var batches = [];
+  for (var i = 0; i < allRefs.length; i += CSS_BATCH_SIZE) {
+    batches.push(allRefs.slice(i, i + CSS_BATCH_SIZE));
+  }
+
+  var totalResults = {};
+  var errors = 0;
+
+  for (var b = 0; b < batches.length; b++) {
+    statusEl.textContent = 'Batch ' + (b + 1) + ' / ' + batches.length + ' (' + batches[b].length + ' Artikel)...';
+
+    try {
+      var soapBody = buildCssSoapRequest(batches[b]);
+      var response = await fetch(CSS_CORS_PROXY + encodeURIComponent(CSS_ENDPOINT), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/soap+xml; charset=utf-8; action="DVSE.WebApp.ErpService/GetArticleInformation"'
+        },
+        body: soapBody
+      });
+
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      var xmlText = await response.text();
+      var batchResults = parseCssResponse(xmlText);
+      Object.assign(totalResults, batchResults);
+    } catch (err) {
+      console.error('CSS Batch ' + (b + 1) + ' Fehler:', err);
+      errors++;
+    }
+
+    // Small delay between batches
+    if (b < batches.length - 1) {
+      await new Promise(function(r) { setTimeout(r, 500); });
+    }
+  }
+
+  // Enrich matchData with CSS results
+  matchData.forEach(function(r) {
+    var cssResult = totalResults[r.ref];
+    if (cssResult) {
+      r.cssNr = cssResult.cssNr;
+      r.cssEkLive = cssResult.cssEk;
+      r.cssVkLive = cssResult.cssVk;
+      r.cssBestand = cssResult.cssBestand;
+      r.cssVerfuegbar = cssResult.cssVerfuegbar;
+    }
+  });
+
+  cssQueryRunning = false;
+  btn.disabled = false;
+  btn.textContent = 'CSS Warenwirtschaft abfragen';
+  var found = Object.keys(totalResults).length;
+  statusEl.textContent = found + ' Artikel gefunden' + (errors ? ', ' + errors + ' Fehler' : '');
+
+  renderMatchTable();
+  toast('CSS Abfrage fertig: ' + found + ' Artikel');
 }
 
 function downloadCssExport() {
