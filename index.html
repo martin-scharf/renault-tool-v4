@@ -136,17 +136,29 @@ tr:hover td { background:rgba(245,197,24,.03); }
 .toast.show { opacity:1; transform:translateY(0); }
 
 /* ROW STATUS */
-tr.row-problem td { background:rgba(248,113,113,.08); }
-tr.row-problem:hover td { background:rgba(248,113,113,.14); }
-tr.row-ok td { }
-tr.row-unknown td { background:rgba(251,146,60,.05); }
-tr.row-unknown:hover td { background:rgba(251,146,60,.1); }
+tr.row-code-1 td { background:rgba(96,165,250,.08); }
+tr.row-code-1:hover td { background:rgba(96,165,250,.14); }
+tr.row-code-2 td { background:rgba(248,113,113,.08); }
+tr.row-code-2:hover td { background:rgba(248,113,113,.14); }
+tr.row-code-3 td { background:rgba(167,139,250,.08); }
+tr.row-code-3:hover td { background:rgba(167,139,250,.14); }
+tr.row-code-4 td { background:rgba(251,146,60,.08); }
+tr.row-code-4:hover td { background:rgba(251,146,60,.14); }
+tr.row-unknown td { background:rgba(136,145,164,.06); }
+tr.row-unknown:hover td { background:rgba(136,145,164,.12); }
 .code-label { display:inline-flex; align-items:center; gap:6px; }
 .code-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
 .code-dot.green { background:var(--green); }
+.code-dot.blue { background:var(--blue); }
 .code-dot.red { background:var(--red); }
+.code-dot.purple { background:var(--purple); }
 .code-dot.orange { background:var(--orange); }
 .code-dot.gray { background:var(--text2); }
+.section-block { margin-bottom:24px; }
+.section-block .section-head { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); }
+.section-block .section-head h3 { font-size:14px; font-weight:700; display:flex; align-items:center; gap:8px; }
+.section-block .section-head .cnt { font-size:13px; color:var(--text2); }
+.match-summary { grid-template-columns:repeat(6,1fr); }
 
 /* FOOTER */
 footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); border-top:1px solid var(--border); margin-top:40px; }
@@ -249,40 +261,42 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
     <!-- BESTELLUNG -->
     <div class="panel" id="panel-bestellung">
       <div class="match-summary" id="order-summary" style="display:none;">
-        <div class="card">
-          <h3>Positionen</h3>
-          <div class="num accent" id="order-sum-total">0</div>
-        </div>
-        <div class="card">
+        <div class="card" style="border-left:3px solid var(--green);">
           <h3>Gültig</h3>
           <div class="num green" id="order-sum-ok">0</div>
         </div>
-        <div class="card">
-          <h3>Problematisch</h3>
-          <div class="num red" id="order-sum-problem">0</div>
+        <div class="card" style="border-left:3px solid var(--blue);">
+          <h3>Austauschbar (1)</h3>
+          <div class="num blue" id="order-sum-1">0</div>
         </div>
-        <div class="card">
+        <div class="card" style="border-left:3px solid var(--red);">
+          <h3>Wird ersetzt (2)</h3>
+          <div class="num red" id="order-sum-2">0</div>
+        </div>
+        <div class="card" style="border-left:3px solid var(--purple);">
+          <h3>Nicht lieferbar (3)</h3>
+          <div class="num" style="color:var(--purple)" id="order-sum-3">0</div>
+        </div>
+        <div class="card" style="border-left:3px solid var(--orange);">
+          <h3>Gesperrt (4)</h3>
+          <div class="num orange" id="order-sum-4">0</div>
+        </div>
+        <div class="card" style="border-left:3px solid var(--text2);">
           <h3>Nicht in Stammdaten</h3>
-          <div class="num orange" id="order-sum-unknown">0</div>
+          <div class="num" style="color:var(--text2)" id="order-sum-unknown">0</div>
         </div>
       </div>
-      <div class="table-wrap">
-        <div class="table-header">
-          <h2>Kundenbestellung — Gültigkeitsprüfung</h2>
-          <div class="search-bar">
-            <select id="filter-order" onchange="renderOrderTable()">
-              <option value="all">Alle</option>
-              <option value="ok">Nur Gültige</option>
-              <option value="problem">Nur Problematische</option>
-              <option value="unknown">Nicht in Stammdaten</option>
-            </select>
-            <input type="text" id="search-order" placeholder="Suche..." oninput="renderOrderTable()">
-            <span class="count" id="count-order-tbl"></span>
-          </div>
-        </div>
-        <div class="table-scroll" id="order-table-wrap">
-          <div class="empty" id="empty-order"><div class="icon">&#9993;</div><p>Bestelldatei (Excel) hochladen</p></div>
-        </div>
+      <div class="action-bar" id="order-actions" style="display:none;">
+        <button class="btn btn-accent" onclick="exportOrderExcel('all')">Alle als Excel</button>
+        <button class="btn" style="background:var(--green);color:#000" onclick="exportOrderExcel('ok')">Gültige</button>
+        <button class="btn" style="background:var(--blue);color:#000" onclick="exportOrderExcel('1')">Austauschbar (1)</button>
+        <button class="btn" style="background:var(--red);color:#000" onclick="exportOrderExcel('2')">Wird ersetzt (2)</button>
+        <button class="btn" style="background:var(--purple);color:#000" onclick="exportOrderExcel('3')">Nicht lieferbar (3)</button>
+        <button class="btn" style="background:var(--orange);color:#000" onclick="exportOrderExcel('4')">Gesperrt (4)</button>
+        <button class="btn btn-outline" onclick="exportOrderExcel('unknown')">Nicht in Stammdaten</button>
+      </div>
+      <div id="order-sections">
+        <div class="empty" id="empty-order"><div class="icon">&#9993;</div><p>Bestelldatei (Excel) + Stammdaten hochladen</p></div>
       </div>
     </div>
 
@@ -567,90 +581,134 @@ function renderStammTable() {
 
 // Teile-Code Beschreibungen
 const TEILE_CODES = {
-  '':  { label: 'Gültig', color: 'green', cls: 'row-ok' },
-  '1': { label: 'Austauschbar mit Folgenummer', color: 'orange', cls: 'row-problem' },
-  '2': { label: 'Wird ersetzt durch Folgenummer', color: 'red', cls: 'row-problem' },
-  '3': { label: 'Nicht mehr lieferbar', color: 'red', cls: 'row-problem' },
-  '4': { label: 'Gesperrt, wird später geliefert', color: 'orange', cls: 'row-problem' }
+  '':  { label: 'Gültig', color: 'green', dotCls: 'green', rowCls: '', category: 'ok' },
+  '1': { label: 'Austauschbar mit Folgenummer', color: 'blue', dotCls: 'blue', rowCls: 'row-code-1', category: '1' },
+  '2': { label: 'Wird ersetzt durch Folgenummer', color: 'red', dotCls: 'red', rowCls: 'row-code-2', category: '2' },
+  '3': { label: 'Nicht mehr lieferbar', color: 'purple', dotCls: 'purple', rowCls: 'row-code-3', category: '3' },
+  '4': { label: 'Gesperrt, wird später geliefert', color: 'orange', dotCls: 'orange', rowCls: 'row-code-4', category: '4' }
 };
+
+const CATEGORY_META = {
+  'ok':      { title: 'Gültig', dotCls: 'green', borderColor: 'var(--green)' },
+  '1':       { title: 'Austauschbar mit Folgenummer (Code 1)', dotCls: 'blue', borderColor: 'var(--blue)' },
+  '2':       { title: 'Wird ersetzt durch Folgenummer (Code 2)', dotCls: 'red', borderColor: 'var(--red)' },
+  '3':       { title: 'Nicht mehr lieferbar (Code 3)', dotCls: 'purple', borderColor: 'var(--purple)' },
+  '4':       { title: 'Gesperrt, wird später geliefert (Code 4)', dotCls: 'orange', borderColor: 'var(--orange)' },
+  'unknown': { title: 'Nicht in Stammdaten gefunden', dotCls: 'gray', borderColor: 'var(--text2)' }
+};
+
+let enrichedOrderData = [];
 
 function getOrderValidity(order) {
   const ref = normalizeRef(order.ref);
-  // Lookup: try exact, then without leading zeros
   let stamm = stammMap[ref];
   if (!stamm) stamm = stammMap[ref.replace(/^0+/, '')];
   if (!stamm) {
-    // Try adding leading zeros/spaces (Stammdaten can be 10 chars padded)
     for (const key of Object.keys(stammMap)) {
       if (key.replace(/^0+/, '') === ref.replace(/^0+/, '')) { stamm = stammMap[key]; break; }
     }
   }
-  if (!stamm) return { status: 'unknown', label: 'Nicht in Stammdaten', color: 'gray', cls: 'row-unknown', austausch: '', code: '', stammRef: '' };
+  if (!stamm) return { status: 'unknown', label: 'Nicht in Stammdaten', dotCls: 'gray', rowCls: 'row-unknown', austausch: '', code: '', category: 'unknown' };
   const code = stamm.code || '';
   const info = TEILE_CODES[code] || TEILE_CODES[''];
-  return { status: code ? 'problem' : 'ok', ...info, austausch: stamm.austausch || '', code, stammRef: stamm.teilenr };
+  return { ...info, austausch: stamm.austausch || '', code };
 }
 
 function renderOrderTable() {
-  const wrap = document.getElementById('order-table-wrap');
-  if (!orderData.length) return;
+  const container = document.getElementById('order-sections');
+  if (!orderData.length || !stammData.length) return;
 
-  const q = (document.getElementById('search-order').value || '').toLowerCase();
-  const filter = document.getElementById('filter-order')?.value || 'all';
-  const hasStamm = stammData.length > 0;
+  enrichedOrderData = orderData.map(r => ({ ...r, validity: getOrderValidity(r) }));
 
-  // Enrich order data with validity
-  let enriched = orderData.map(r => ({ ...r, validity: hasStamm ? getOrderValidity(r) : null }));
+  // Count per category
+  const counts = { ok: 0, '1': 0, '2': 0, '3': 0, '4': 0, unknown: 0 };
+  enrichedOrderData.forEach(r => counts[r.validity.category] = (counts[r.validity.category] || 0) + 1);
 
-  // Filter
-  if (filter === 'ok') enriched = enriched.filter(r => r.validity?.status === 'ok');
-  else if (filter === 'problem') enriched = enriched.filter(r => r.validity?.status === 'problem');
-  else if (filter === 'unknown') enriched = enriched.filter(r => r.validity?.status === 'unknown');
+  // Summary
+  document.getElementById('order-summary').style.display = 'grid';
+  document.getElementById('order-sum-ok').textContent = counts.ok;
+  document.getElementById('order-sum-1').textContent = counts['1'];
+  document.getElementById('order-sum-2').textContent = counts['2'];
+  document.getElementById('order-sum-3').textContent = counts['3'];
+  document.getElementById('order-sum-4').textContent = counts['4'];
+  document.getElementById('order-sum-unknown').textContent = counts.unknown;
+  document.getElementById('order-actions').style.display = 'flex';
 
-  if (q) enriched = enriched.filter(r =>
-    r.ref.toLowerCase().includes(q) || r.beschreibung.toLowerCase().includes(q) || r.postRef.toLowerCase().includes(q)
-  );
+  // Build sections
+  const categories = ['ok', '1', '2', '3', '4', 'unknown'];
+  let html = '';
+  for (const cat of categories) {
+    const items = enrichedOrderData.filter(r => r.validity.category === cat);
+    if (items.length === 0) continue;
+    const meta = CATEGORY_META[cat];
+    const showAustausch = cat === '1' || cat === '2';
 
-  document.getElementById('count-order-tbl').textContent = enriched.length + ' / ' + orderData.length;
-
-  // Summary cards
-  if (hasStamm) {
-    const allEnriched = orderData.map(r => getOrderValidity(r));
-    const okCount = allEnriched.filter(v => v.status === 'ok').length;
-    const problemCount = allEnriched.filter(v => v.status === 'problem').length;
-    const unknownCount = allEnriched.filter(v => v.status === 'unknown').length;
-    document.getElementById('order-summary').style.display = 'grid';
-    document.getElementById('order-sum-total').textContent = orderData.length;
-    document.getElementById('order-sum-ok').textContent = okCount;
-    document.getElementById('order-sum-problem').textContent = problemCount;
-    document.getElementById('order-sum-unknown').textContent = unknownCount;
+    html += `<div class="section-block">
+      <div class="table-wrap" style="border-left:3px solid ${meta.borderColor}">
+        <div class="section-head">
+          <h3><span class="code-dot ${meta.dotCls}"></span>${meta.title}</h3>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="cnt">${items.length} Positionen</span>
+            <button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="exportOrderExcel('${cat}')">Excel</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>POST REF</th><th>Beschreibung</th><th class="text-center">Menge</th>
+              <th>REF (Teilenr)</th><th class="text-right">Preis</th><th class="text-right">Gesamt</th>
+              <th>Teile-Code</th>
+              ${showAustausch ? '<th>Austausch-/Ersatz-Nr</th>' : ''}
+            </tr></thead>
+            <tbody>${items.map(r => `<tr class="${r.validity.rowCls}">
+              <td class="mono">${r.postRef}</td>
+              <td>${r.beschreibung}</td>
+              <td class="text-center">${r.menge}</td>
+              <td class="mono">${r.ref}</td>
+              <td class="text-right mono">${fmt(r.preis)}</td>
+              <td class="text-right mono">${fmt(r.gesamt)}</td>
+              <td class="text-center"><span class="code-label"><span class="code-dot ${r.validity.dotCls}"></span>${r.validity.code || '—'}</span></td>
+              ${showAustausch ? `<td class="mono" style="color:var(--accent);font-weight:600">${r.validity.austausch || '—'}</td>` : ''}
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
   }
+  container.innerHTML = html;
+}
 
-  const stammCol = hasStamm;
-  wrap.innerHTML = `<table>
-    <thead><tr>
-      <th>POST REF</th><th>Beschreibung</th><th class="text-center">Menge</th>
-      <th>REF (Teilenr)</th><th class="text-right">Preis</th><th class="text-right">Gesamt</th>
-      ${stammCol ? '<th>Status</th><th>Teile-Code</th><th>Austausch-Nr</th>' : ''}
-    </tr></thead>
-    <tbody>${enriched.map(r => {
-      const v = r.validity;
-      const rowCls = v ? v.cls : '';
-      return `<tr class="${rowCls}">
-        <td class="mono">${r.postRef}</td>
-        <td>${r.beschreibung}</td>
-        <td class="text-center">${r.menge}</td>
-        <td class="mono">${r.ref}</td>
-        <td class="text-right mono">${fmt(r.preis)}</td>
-        <td class="text-right mono">${fmt(r.gesamt)}</td>
-        ${stammCol ? `
-          <td><span class="code-label"><span class="code-dot ${v.color}"></span>${v.label}</span></td>
-          <td class="text-center mono">${v.code || '—'}</td>
-          <td class="mono" style="color:${v.austausch ? 'var(--accent)' : 'var(--text2)'}">${v.austausch || '—'}</td>
-        ` : ''}
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
+// ── EXCEL EXPORT pro Rubrik ──
+function exportOrderExcel(category) {
+  if (!enrichedOrderData.length) { toast('Keine Daten'); return; }
+  const items = category === 'all' ? enrichedOrderData : enrichedOrderData.filter(r => r.validity.category === category);
+  if (!items.length) { toast('Keine Einträge in dieser Rubrik'); return; }
+
+  const rows = items.map(r => ({
+    'POST REF': r.postRef,
+    'Beschreibung': r.beschreibung,
+    'Menge': r.menge,
+    'REF (Teilenr)': r.ref,
+    'Preis': r.preis,
+    'Gesamt': r.gesamt,
+    'Teile-Code': r.validity.code || '',
+    'Status': r.validity.label,
+    'Austausch-Nr': r.validity.austausch || ''
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // Column widths
+  ws['!cols'] = [
+    { wch: 14 }, { wch: 40 }, { wch: 8 }, { wch: 14 },
+    { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 14 }
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const catLabel = category === 'all' ? 'Alle' : (CATEGORY_META[category]?.title || category);
+  XLSX.utils.book_append_sheet(wb, ws, catLabel.substring(0, 31));
+  XLSX.writeFile(wb, `Bestellung_${category === 'all' ? 'Komplett' : 'Code_' + category}.xlsx`);
+  toast('Excel Export: ' + catLabel);
 }
 
 function renderCssTable() {
