@@ -402,30 +402,27 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
     <div class="panel" id="panel-bestellexport">
       <div class="table-wrap">
         <div class="table-header">
-          <h2>Bestellexport (Excel → TXT)</h2>
+          <h2>Bestellexport (CSS → TXT)</h2>
         </div>
         <div style="padding:20px 0">
           <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px">
             <div>
-              <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Auftragsbestellnummer</label>
-              <input type="text" id="bexport-auftragnr" placeholder="z.B. 4500012345" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;width:250px">
+              <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Auftragsbestellnummer (Lieferant)</label>
+              <input type="text" id="bexport-auftragnr" placeholder="z.B. 4500012345" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;width:280px">
             </div>
-            <div>
-              <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Excel-Datei hochladen</label>
-              <div class="upload-box" id="box-bexport" onclick="document.getElementById('file-bexport').click()" style="padding:12px 20px;min-height:auto;cursor:pointer">
-                <span id="bexport-filename" style="font-size:13px;color:var(--text2)">Datei wählen oder hierher ziehen</span>
-                <input type="file" id="file-bexport" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadBestellexport(this.files[0])">
-              </div>
-            </div>
+            <button class="btn btn-accent" onclick="generateBestellexport()">Vorschau</button>
+            <button class="btn btn-green" onclick="downloadBestellexportTxt()">TXT Export</button>
+          </div>
+          <div id="bexport-info" style="margin-bottom:16px">
+            <div class="empty" id="empty-bexport"><div class="icon">&#128196;</div><p>Erst Bestellung hochladen + CSS Warenwirtschaft abfragen, dann hier exportieren</p></div>
           </div>
           <div id="bexport-preview" style="display:none">
             <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
               <span class="badge" style="background:var(--green);color:#000;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600" id="bexport-count">0 Positionen</span>
-              <button class="btn btn-accent" onclick="downloadBestellexportTxt()">TXT Export</button>
+              <span class="badge" style="background:var(--orange);color:#000;padding:6px 14px;border-radius:6px;font-size:13px" id="bexport-skipped"></span>
             </div>
             <div class="table-scroll" id="bexport-table-wrap"></div>
           </div>
-          <div class="empty" id="empty-bexport"><div class="icon">&#128196;</div><p>Excel-Datei hochladen für Bestellexport</p></div>
         </div>
       </div>
     </div>
@@ -448,7 +445,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDrop('box-stamm', loadStammdaten);
   setupDrop('box-order', loadBestellung);
   setupDrop('box-css', loadCssData);
-  setupDrop('box-bexport', loadBestellexport);
 });
 
 // ── AUTH ──
@@ -1323,73 +1319,90 @@ function downloadFile(name, content) {
   a.click();
 }
 
-// ── BESTELLEXPORT (Excel → TXT) ──
-var bexportData = [];
+// ── BESTELLEXPORT (CSS → TXT) ──
+var bexportRows = [];
 
-function loadBestellexport(file) {
-  if (!file) return;
-  document.getElementById('bexport-filename').textContent = file.name;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var data = new Uint8Array(e.target.result);
-    var wb = XLSX.read(data, { type: 'array' });
-    var ws = wb.Sheets[wb.SheetNames[0]];
-    var rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+function generateBestellexport() {
+  if (!matchData.length) { toast('Erst Bestellung hochladen + Margenanalyse starten'); return; }
 
-    if (!rows.length) { toast('Keine Daten in der Datei'); return; }
+  // Only items that have CSS data (cssNr)
+  var withCss = matchData.filter(function(r) { return r.cssNr && r.cssNr !== ''; });
+  var skipped = matchData.length - withCss.length;
 
-    // Show column names for debugging
-    console.log('Bestellexport Spalten:', Object.keys(rows[0]));
+  if (!withCss.length) { toast('Keine Artikel mit CSS-Nummer gefunden. Erst CSS Warenwirtschaft abfragen!'); return; }
 
-    bexportData = rows;
-    document.getElementById('empty-bexport').style.display = 'none';
-    document.getElementById('bexport-preview').style.display = 'block';
-    document.getElementById('bexport-count').textContent = rows.length + ' Positionen';
-    renderBestellexportTable();
-    toast(rows.length + ' Positionen geladen');
-  };
-  reader.readAsArrayBuffer(file);
-}
+  bexportRows = withCss;
+  document.getElementById('empty-bexport').style.display = 'none';
+  document.getElementById('bexport-preview').style.display = 'block';
+  document.getElementById('bexport-count').textContent = withCss.length + ' Positionen';
+  document.getElementById('bexport-skipped').textContent = skipped > 0 ? skipped + ' ohne CSS-Nr übersprungen' : '';
+  document.getElementById('bexport-skipped').style.display = skipped > 0 ? '' : 'none';
 
-function renderBestellexportTable() {
-  if (!bexportData.length) return;
-  var keys = Object.keys(bexportData[0]);
-  var html = '<table><thead><tr>';
-  keys.forEach(function(k) { html += '<th>' + k + '</th>'; });
-  html += '</tr></thead><tbody>';
-  bexportData.forEach(function(row) {
-    html += '<tr>';
-    keys.forEach(function(k) { html += '<td>' + (row[k] !== undefined ? row[k] : '') + '</td>'; });
-    html += '</tr>';
+  // Render preview table
+  var html = '<table><thead><tr><th>Artikel-Nr. (CSS)</th><th>Bezeichnung</th><th>Menge</th><th>Lieferanten-EK</th><th>Brutto-VK</th><th>Netto-VK</th><th>Rabatt</th></tr></thead><tbody>';
+  withCss.forEach(function(r) {
+    var ek = r.cssEkLive || r.ekPerUnit || 0;
+    var netto = r.preis || 0;
+    html += '<tr>'
+      + '<td class="mono">' + r.cssNr + '</td>'
+      + '<td>' + (r.css ? r.css.description : r.beschreibung) + '</td>'
+      + '<td>' + r.menge + '</td>'
+      + '<td>' + fmtPrice(ek) + '</td>'
+      + '<td>' + fmtPrice(netto) + '</td>'
+      + '<td>' + fmtPrice(netto) + '</td>'
+      + '<td>0</td>'
+      + '</tr>';
   });
   html += '</tbody></table>';
   document.getElementById('bexport-table-wrap').innerHTML = html;
+  toast(withCss.length + ' Positionen bereit');
+}
+
+function fmtPrice(v) {
+  return (Math.round(parseFloat(v || 0) * 100) / 100).toFixed(2);
 }
 
 function downloadBestellexportTxt() {
-  if (!bexportData.length) { toast('Keine Daten geladen'); return; }
+  if (!bexportRows.length) { generateBestellexport(); if (!bexportRows.length) return; }
   var auftragNr = document.getElementById('bexport-auftragnr').value.trim();
   if (!auftragNr) { toast('Bitte Auftragsbestellnummer eingeben'); return; }
 
+  // Generate random Online-ID
+  var randId = 'B' + Math.floor(Math.random() * 9000 + 1000) + 'MB' + Math.floor(Math.random() * 90000 + 10000);
+
+  // Tomorrow's date
+  var tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  var lieferdatum = tomorrow.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  // Current timestamp
+  var now = new Date();
+  var beleginfos = auftragNr + ' - ' + now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + now.toLocaleTimeString('de-DE');
+
   var lines = [];
-  var keys = Object.keys(bexportData[0]);
 
-  // Header line
-  lines.push(auftragNr);
+  // Block 1: Beleg-Header
+  lines.push('Online-ID;Belegart;Beleginfos;Kundennummer/Lieferantennummer;Lieferdatum;Liefertour;Versandart;Verkäufer-Nr.;L-Anschrift;L-Adresse;L-PLZ;L-Ort;L-Land');
+  lines.push(randId + ';RU-BR;' + beleginfos + ';866;' + lieferdatum + ';;;6;;;;;');
 
-  // Data lines: each row as tab-separated values
-  bexportData.forEach(function(row) {
-    var vals = keys.map(function(k) { return row[k] !== undefined ? String(row[k]).trim() : ''; });
-    lines.push(vals.join('\t'));
+  // Block 2: Artikel-Header
+  lines.push('Artikel-Nr.;Artikelbezeichnung;Ergänzung-1;Ergänzung-2;Menge;Lieferanten-EK;Brutto-VK;Netto-VK;Rabatt;Textzeile');
+
+  // Block 3: Artikel-Zeilen
+  bexportRows.forEach(function(r) {
+    var ek = fmtPrice(r.cssEkLive || r.ekPerUnit || 0);
+    var netto = fmtPrice(r.preis || 0);
+    var bez = r.css ? r.css.description : r.beschreibung;
+    lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + ek + ';' + netto + ';' + netto + ';0;');
   });
 
   var content = lines.join('\n');
   var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'bestellung_' + auftragNr + '.txt';
+  a.download = 'RUB' + randId.substring(1) + '.txt';
   a.click();
-  toast('TXT Export: bestellung_' + auftragNr + '.txt');
+  toast('TXT Export erstellt');
 }
 </script>
 </body>
