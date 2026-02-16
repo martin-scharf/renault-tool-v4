@@ -29,7 +29,8 @@ export default async function handler(req, res) {
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8; action="DVSE.WebApp.ErpService/GetArticleInformation"',
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': '"DVSE.WebApp.ErpService/GetArticleInformation"',
       },
       body: body,
     });

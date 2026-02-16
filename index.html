@@ -1104,30 +1104,28 @@ var CSS_ENDPOINT = 'http://80.153.160.204:8080/dvse/Erp.asmx';
 var CSS_CUSTOMER_ID = '866';
 var CSS_CUSTOMER_ID2 = '866';
 var CSS_DLNR = '7455';
-var CSS_BATCH_SIZE = 30;
+var CSS_BATCH_SIZE = 1; // Muss 1 sein: CSS API gibt bei Batch falsche ArtikelNummer zurück
 var CSS_PROXY_PATH = '/api/css-proxy'; // Vercel serverless proxy
 
 function buildCssSoapRequest(articles) {
   var itemsXml = articles.map(function(ref) {
     return '<Item>'
+      + '<WholesalerArtNr></WholesalerArtNr>'
       + '<EinspNr>' + CSS_DLNR + '</EinspNr>'
       + '<EinspArtNr>' + ref + '</EinspArtNr>'
-      + '<GenericPartNr>0</GenericPartNr>'
-      + '<TecdocTypeNr>0</TecdocTypeNr>'
-      + '<Type>0</Type>'
-      + '<AvailState>nochnichtangefragt</AvailState>'
-      + '<RequestedQuantity><Value>1</Value></RequestedQuantity>'
+      + '<RequestedQuantity><Value>1</Value><QuantityExtended><MinQuantity>0</MinQuantity><MaxQuantity>0</MaxQuantity><AvailState>unbekannt</AvailState></QuantityExtended></RequestedQuantity>'
+      + '<AvailState>unbekannt</AvailState>'
       + '</Item>';
   }).join('');
 
-  return '<?xml version="1.0" encoding="utf-8"?>'
-    + '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
-    + '<soap12:Body>'
+  return '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:dvse="DVSE.WebApp.ErpService">'
+    + '<soapenv:Header/>'
+    + '<soapenv:Body>'
     + '<GetArticleInformation xmlns="DVSE.WebApp.ErpService">'
-    + '<user><CustomerId>' + CSS_CUSTOMER_ID + '</CustomerId><CustomerId2>' + CSS_CUSTOMER_ID2 + '</CustomerId2><UserName></UserName><PassWord></PassWord></user>'
+    + '<user><CustomerId>' + CSS_CUSTOMER_ID + '</CustomerId><PassWord></PassWord><UserName></UserName></user>'
     + '<items><Item>' + itemsXml + '</Item></items>'
     + '</GetArticleInformation>'
-    + '</soap12:Body></soap12:Envelope>';
+    + '</soapenv:Body></soapenv:Envelope>';
 }
 
 function parseCssResponse(xmlText) {
