@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Renault V4 — Teile-Zentrale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #0c0f14;
+  --surface: #141820;
+  --surface2: #1a1f2a;
+  --border: #252b38;
+  --text: #e2e6ed;
+  --text2: #8891a4;
+  --accent: #f5c518;
+  --accent2: #e8b800;
+  --green: #34d399;
+  --red: #f87171;
+  --orange: #fb923c;
+  --blue: #60a5fa;
+  --purple: #a78bfa;
+  --radius: 10px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+code, .mono { font-family:'JetBrains Mono',monospace; }
+
+/* AUTH */
+#auth-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+#auth-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:48px; width:380px; text-align:center; }
+#auth-box h1 { font-size:22px; font-weight:700; margin-bottom:6px; letter-spacing:-0.5px; }
+#auth-box .sub { color:var(--text2); font-size:14px; margin-bottom:28px; }
+#auth-box input { width:100%; padding:12px 16px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; margin-bottom:12px; font-family:inherit; }
+#auth-box input:focus { outline:none; border-color:var(--accent); }
+#auth-box button { width:100%; padding:12px; background:var(--accent); color:#000; border:none; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer; font-family:inherit; }
+#auth-box button:hover { background:var(--accent2); }
+.auth-err { color:var(--red); font-size:13px; margin-top:8px; display:none; }
+
+/* LAYOUT */
+#app { display:none; }
+header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 32px; height:56px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+header h1 { font-size:17px; font-weight:700; letter-spacing:-0.5px; }
+header h1 span { color:var(--accent); }
+header .user { color:var(--text2); font-size:13px; }
+
+.tabs { display:flex; gap:0; background:var(--surface); border-bottom:1px solid var(--border); padding:0 32px; }
+.tab { padding:12px 24px; font-size:13px; font-weight:500; color:var(--text2); cursor:pointer; border-bottom:2px solid transparent; transition:all .2s; }
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--accent); border-color:var(--accent); }
+
+main { max-width:1400px; margin:0 auto; padding:28px 32px; }
+
+/* CARDS */
+.grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:28px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:24px; }
+.card h3 { font-size:13px; font-weight:500; color:var(--text2); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; }
+.card .num { font-size:32px; font-weight:700; letter-spacing:-1px; }
+.card .num.accent { color:var(--accent); }
+.card .num.green { color:var(--green); }
+.card .num.blue { color:var(--blue); }
+.card .detail { font-size:12px; color:var(--text2); margin-top:6px; }
+
+/* UPLOAD ZONE */
+.upload-section { margin-bottom:28px; }
+.upload-section h2 { font-size:18px; font-weight:700; margin-bottom:16px; letter-spacing:-0.3px; }
+.upload-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.upload-box { background:var(--surface); border:2px dashed var(--border); border-radius:var(--radius); padding:32px 24px; text-align:center; cursor:pointer; transition:all .2s; position:relative; }
+.upload-box:hover { border-color:var(--accent); background:var(--surface2); }
+.upload-box.loaded { border-color:var(--green); border-style:solid; }
+.upload-box .icon { font-size:28px; margin-bottom:10px; }
+.upload-box .label { font-size:14px; font-weight:600; margin-bottom:4px; }
+.upload-box .hint { font-size:12px; color:var(--text2); }
+.upload-box .status { font-size:12px; margin-top:10px; font-weight:600; }
+.upload-box .status.ok { color:var(--green); }
+.upload-box .status.err { color:var(--red); }
+.upload-box input[type=file] { display:none; }
+
+/* TABLE */
+.table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.table-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); }
+.table-header h2 { font-size:15px; font-weight:700; }
+.table-header .count { font-size:13px; color:var(--text2); }
+.search-bar { display:flex; gap:10px; align-items:center; }
+.search-bar input { padding:8px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; width:260px; font-family:inherit; }
+.search-bar input:focus { outline:none; border-color:var(--accent); }
+.search-bar select { padding:8px 12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; font-family:inherit; }
+.btn { padding:8px 16px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
+.btn-accent { background:var(--accent); color:#000; }
+.btn-accent:hover { background:var(--accent2); }
+.btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); }
+.btn-outline:hover { border-color:var(--text2); }
+.btn-green { background:var(--green); color:#000; }
+
+table { width:100%; border-collapse:collapse; font-size:13px; }
+thead { background:var(--surface2); }
+th { padding:10px 14px; text-align:left; font-weight:600; font-size:12px; color:var(--text2); text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; border-bottom:1px solid var(--border); }
+td { padding:10px 14px; border-bottom:1px solid var(--border); white-space:nowrap; }
+tr:hover td { background:rgba(245,197,24,.03); }
+.text-right { text-align:right; }
+.text-center { text-align:center; }
+.badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+.badge-green { background:rgba(52,211,153,.15); color:var(--green); }
+.badge-red { background:rgba(248,113,113,.15); color:var(--red); }
+.badge-orange { background:rgba(251,146,60,.15); color:var(--orange); }
+.badge-blue { background:rgba(96,165,250,.15); color:var(--blue); }
+.badge-purple { background:rgba(167,139,250,.15); color:var(--purple); }
+.table-scroll { max-height:600px; overflow-y:auto; }
+.table-scroll::-webkit-scrollbar { width:6px; }
+.table-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+/* PANEL */
+.panel { display:none; }
+.panel.active { display:block; }
+
+/* ABGLEICH */
+.match-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+.action-bar { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+
+/* RESPONSIVE */
+@media(max-width:1024px) {
+  .grid-3, .upload-grid, .match-summary { grid-template-columns:1fr; }
+  main { padding:20px 16px; }
+}
+
+/* EMPTY STATE */
+.empty { text-align:center; padding:60px 20px; color:var(--text2); }
+.empty .icon { font-size:48px; margin-bottom:12px; opacity:.4; }
+.empty p { font-size:14px; }
+
+/* TOAST */
+.toast { position:fixed; bottom:24px; right:24px; background:var(--green); color:#000; padding:12px 20px; border-radius:8px; font-size:13px; font-weight:600; z-index:999; opacity:0; transform:translateY(10px); transition:all .3s; }
+.toast.show { opacity:1; transform:translateY(0); }
+
+/* FOOTER */
+footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); border-top:1px solid var(--border); margin-top:40px; }
+</style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div id="auth-box">
+    <h1>Renault V4</h1>
+    <div class="sub">Teile-Zentrale</div>
+    <input type="text" id="auth-user" placeholder="Benutzer" autofocus>
+    <input type="password" id="auth-pass" placeholder="Passwort" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">Anmelden</button>
+    <div class="auth-err" id="auth-err">Falscher Benutzer oder Passwort</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header>
+    <h1>Renault <span>V4</span> — Teile-Zentrale</h1>
+    <span class="user">Smarty's Autozubehör · DLNR 7455</span>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showPanel('dashboard')">Dashboard</div>
+    <div class="tab" onclick="showPanel('stammdaten')">Stammdaten</div>
+    <div class="tab" onclick="showPanel('bestellung')">Bestellung</div>
+    <div class="tab" onclick="showPanel('abgleich')">Abgleich</div>
+    <div class="tab" onclick="showPanel('css-export')">CSS Export</div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <main>
+    <div class="panel active" id="panel-dashboard">
+      <div class="upload-section">
+        <h2>Dateien laden</h2>
+        <div class="upload-grid">
+          <div class="upload-box" id="box-stamm" onclick="this.querySelector('input').click()">
+            <input type="file" accept=".txt,.dat,.csv,*" onchange="loadStammdaten(this.files[0])">
+            <div class="icon">&#9776;</div>
+            <div class="label">Renault Stammdaten</div>
+            <div class="hint">TLDRAGP / Festformat 256 Zeichen</div>
+            <div class="status" id="status-stamm"></div>
+          </div>
+          <div class="upload-box" id="box-order" onclick="this.querySelector('input').click()">
+            <input type="file" accept=".xlsx,.xls" onchange="loadBestellung(this.files[0])">
+            <div class="icon">&#9993;</div>
+            <div class="label">Kundenbestellung</div>
+            <div class="hint">Excel mit POST REF / REF / Menge / Preis</div>
+            <div class="status" id="status-order"></div>
+          </div>
+          <div class="upload-box" id="box-css" onclick="this.querySelector('input').click()">
+            <input type="file" accept=".csv,.txt" onchange="loadCssData(this.files[0])">
+            <div class="icon">&#9881;</div>
+            <div class="label">CSS/ERP Stammdaten</div>
+            <div class="hint">CSV: article;list_price;buying_price;...</div>
+            <div class="status" id="status-css"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="card">
+          <h3>Renault Stammdaten</h3>
+          <div class="num accent" id="count-stamm">—</div>
+          <div class="detail" id="detail-stamm">Keine Datei geladen</div>
+        </div>
+        <div class="card">
+          <h3>Bestellpositionen</h3>
+          <div class="num blue" id="count-order">—</div>
+          <div class="detail" id="detail-order">Keine Datei geladen</div>
+        </div>
+        <div class="card">
+          <h3>CSS/ERP Artikel</h3>
+          <div class="num green" id="count-css">—</div>
+          <div class="detail" id="detail-css">Keine Datei geladen</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STAMMDATEN -->
+    <div class="panel" id="panel-stammdaten">
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>Renault Stammdaten (RDAGTK)</h2>
+          <div class="search-bar">
+            <input type="text" id="search-stamm" placeholder="Teilenummer oder Bezeichnung..." oninput="renderStammTable()">
+            <span class="count" id="count-stamm-tbl"></span>
+          </div>
+        </div>
+        <div class="table-scroll" id="stamm-table-wrap">
+          <div class="empty" id="empty-stamm"><div class="icon">&#9776;</div><p>Renault Stammdatei (TLDRAGP) hochladen</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BESTELLUNG -->
+    <div class="panel" id="panel-bestellung">
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>Kundenbestellung</h2>
+          <div class="search-bar">
+            <input type="text" id="search-order" placeholder="Suche..." oninput="renderOrderTable()">
+            <span class="count" id="count-order-tbl"></span>
+          </div>
+        </div>
+        <div class="table-scroll" id="order-table-wrap">
+          <div class="empty" id="empty-order"><div class="icon">&#9993;</div><p>Bestelldatei (Excel) hochladen</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABGLEICH -->
+    <div class="panel" id="panel-abgleich">
+      <div class="match-summary">
+        <div class="card">
+          <h3>Positionen gesamt</h3>
+          <div class="num accent" id="match-total">0</div>
+        </div>
+        <div class="card">
+          <h3>In CSS gefunden</h3>
+          <div class="num green" id="match-found">0</div>
+        </div>
+        <div class="card">
+          <h3>Nicht in CSS</h3>
+          <div class="num red" id="match-missing">0</div>
+        </div>
+        <div class="card">
+          <h3>Preisdifferenz</h3>
+          <div class="num orange" id="match-diff">0</div>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-accent" onclick="runAbgleich()">Abgleich starten</button>
+        <button class="btn btn-outline" onclick="exportAbgleich()">Export CSV</button>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>Abgleich: Bestellung ↔ CSS ↔ Renault</h2>
+          <div class="search-bar">
+            <select id="filter-match" onchange="renderMatchTable()">
+              <option value="all">Alle</option>
+              <option value="found">In CSS</option>
+              <option value="missing">Nicht in CSS</option>
+              <option value="diff">Preisdifferenz</option>
+            </select>
+            <input type="text" id="search-match" placeholder="Suche..." oninput="renderMatchTable()">
+          </div>
+        </div>
+        <div class="table-scroll" id="match-table-wrap">
+          <div class="empty"><div class="icon">&#8596;</div><p>Bestellung + CSS Datei laden, dann "Abgleich starten"</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CSS EXPORT -->
+    <div class="panel" id="panel-css-export">
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>CSS/ERP Stammdaten</h2>
+          <div class="search-bar">
+            <input type="text" id="search-css" placeholder="Artikel suchen..." oninput="renderCssTable()">
+            <button class="btn btn-green" onclick="downloadCssExport()">CSV Export</button>
+            <span class="count" id="count-css-tbl"></span>
+          </div>
+        </div>
+        <div class="table-scroll" id="css-table-wrap">
+          <div class="empty" id="empty-css"><div class="icon">&#9881;</div><p>CSS/ERP Datei hochladen</p></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>Renault V4 · Smarty's Autozubehör · DLNR 7455</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── AUTH ──
+function doLogin() {
+  const u = document.getElementById('auth-user').value.trim();
+  const p = document.getElementById('auth-pass').value;
+  if (u === 'oe' && p === 'deals!!@1234#') {
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  } else {
+    document.getElementById('auth-err').style.display = 'block';
+  }
+}
+
+// ── DATA STORES ──
+let stammData = [];    // parsed Renault master data
+let orderData = [];    // parsed order rows
+let cssData = [];      // parsed CSS/ERP data
+let cssMap = {};       // article -> css row
+let stammMap = {};     // teilenr -> stamm row
+let matchData = [];    // abgleich results
+
+// ── PANELS ──
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.querySelectorAll('.tab')[['dashboard','stammdaten','bestellung','abgleich','css-export'].indexOf(name)].classList.add('active');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── PARSE RENAULT STAMMDATEN (Fixed-width 256) ──
+function parseStammdaten(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.length >= 119);
+  const rows = [];
+  for (const line of lines) {
+    if (line.substring(0, 6) !== 'RDAGTK') continue;
+    const teilenr = line.substring(40, 51).trim();
+    const code = line.substring(51, 53).trim();
+    const austausch = line.substring(53, 64).trim();
+    const bez1 = line.substring(64, 82).trim();
+    const bez2 = line.substring(82, 100).trim();
+    const bruttoStr = line.substring(100, 111).trim();
+    const brutto = bruttoStr ? parseInt(bruttoStr) / 100 : 0; // Cent -> Euro
+    const waehrung = line.substring(111, 115).trim();
+    const mwstCode = line.substring(115, 117).trim();
+    const nettoCode = line.substring(117, 119).trim();
+    let rabattgruppe = '', familie = '', gewicht = 0;
+    if (line.length >= 165) {
+      rabattgruppe = line.substring(119, 122).trim();
+      gewicht = parseInt(line.substring(139, 150).trim()) || 0;
+      familie = line.substring(161, 165).trim();
+    }
+    rows.push({
+      teilenr, code, austausch,
+      bezeichnung: (bez1 + ' ' + bez2).trim(),
+      brutto, waehrung, mwstCode, nettoCode,
+      rabattgruppe, gewicht, familie
+    });
+  }
+  return rows;
+}
+
+function loadStammdaten(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      stammData = parseStammdaten(e.target.result);
+      stammMap = {};
+      stammData.forEach(r => stammMap[r.teilenr] = r);
+      document.getElementById('box-stamm').classList.add('loaded');
+      document.getElementById('status-stamm').className = 'status ok';
+      document.getElementById('status-stamm').textContent = stammData.length.toLocaleString('de') + ' Teile geladen';
+      document.getElementById('count-stamm').textContent = stammData.length.toLocaleString('de');
+      document.getElementById('detail-stamm').textContent = 'RDAGTK Datei: ' + file.name;
+      renderStammTable();
+      toast(stammData.length.toLocaleString('de') + ' Stammdaten geladen');
+    } catch (err) {
+      document.getElementById('status-stamm').className = 'status err';
+      document.getElementById('status-stamm').textContent = 'Fehler: ' + err.message;
+    }
+  };
+  reader.readAsText(file, 'ISO-8859-1');
+}
+
+// ── PARSE BESTELLUNG (Excel) ──
+function loadBestellung(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws);
+      orderData = json.filter(r => r['REF'] || r['ref']).map(r => ({
+        postRef: r['POST REF'] || r['post ref'] || '',
+        beschreibung: r['BESCHREIBUNG'] || r['beschreibung'] || r['Beschreibung'] || '',
+        menge: parseInt(r['MENGE'] || r['menge'] || r['Menge'] || 0),
+        ref: String(r['REF'] || r['ref'] || r['Ref'] || '').trim(),
+        preis: parseFloat(r['PREIS'] || r['preis'] || r['Preis'] || 0),
+        gesamt: parseFloat(r['GESAMT'] || r['gesamt'] || r['Gesamt'] || 0)
+      }));
+      document.getElementById('box-order').classList.add('loaded');
+      document.getElementById('status-order').className = 'status ok';
+      document.getElementById('status-order').textContent = orderData.length + ' Positionen geladen';
+      document.getElementById('count-order').textContent = orderData.length;
+      document.getElementById('detail-order').textContent = 'Datei: ' + file.name;
+      renderOrderTable();
+      toast(orderData.length + ' Bestellpositionen geladen');
+    } catch (err) {
+      document.getElementById('status-order').className = 'status err';
+      document.getElementById('status-order').textContent = 'Fehler: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── PARSE CSS/ERP (CSV) ──
+function loadCssData(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const lines = e.target.result.split(/\r?\n/).filter(l => l.trim());
+      const header = lines[0].split(';');
+      cssData = [];
+      cssMap = {};
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(';');
+        if (cols.length < 8) continue;
+        const row = {
+          article: cols[0]?.trim() || '',
+          listPrice: parseFloat(cols[1]) || 0,
+          buyingPrice: parseFloat(cols[2]) || 0,
+          buyingPriceSelf: parseFloat(cols[3]) || 0,
+          discount: parseFloat(cols[4]) || 0,
+          discountSelf: parseFloat(cols[5]) || 0,
+          description: cols[6]?.trim() || '',
+          weight: parseInt(cols[7]) || 0,
+          dlnr: cols[8]?.trim() || '7455'
+        };
+        cssData.push(row);
+        cssMap[row.article] = row;
+      }
+      document.getElementById('box-css').classList.add('loaded');
+      document.getElementById('status-css').className = 'status ok';
+      document.getElementById('status-css').textContent = cssData.length.toLocaleString('de') + ' Artikel geladen';
+      document.getElementById('count-css').textContent = cssData.length.toLocaleString('de');
+      document.getElementById('detail-css').textContent = 'Datei: ' + file.name;
+      renderCssTable();
+      toast(cssData.length.toLocaleString('de') + ' CSS Artikel geladen');
+    } catch (err) {
+      document.getElementById('status-css').className = 'status err';
+      document.getElementById('status-css').textContent = 'Fehler: ' + err.message;
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ── RENDER TABLES ──
+function fmt(n) { return n.toFixed(2).replace('.', ','); }
+function fmtP(n) { return n.toFixed(2); }
+
+function renderStammTable() {
+  const wrap = document.getElementById('stamm-table-wrap');
+  if (!stammData.length) return;
+  const q = (document.getElementById('search-stamm').value || '').toLowerCase();
+  const filtered = q ? stammData.filter(r =>
+    r.teilenr.toLowerCase().includes(q) || r.bezeichnung.toLowerCase().includes(q)
+  ) : stammData;
+  document.getElementById('count-stamm-tbl').textContent = filtered.length.toLocaleString('de') + ' / ' + stammData.length.toLocaleString('de');
+  const rows = filtered.slice(0, 500);
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Teilenummer</th><th>Bezeichnung</th><th class="text-right">Brutto EUR</th>
+      <th>Code</th><th>RG</th><th>Familie</th><th class="text-right">Gewicht g</th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td class="mono">${r.teilenr}</td>
+      <td>${r.bezeichnung}</td>
+      <td class="text-right mono">${fmt(r.brutto)}</td>
+      <td class="text-center">${r.code || '—'}</td>
+      <td class="text-center">${r.rabattgruppe || '—'}</td>
+      <td class="mono">${r.familie || '—'}</td>
+      <td class="text-right mono">${r.gewicht || '—'}</td>
+    </tr>`).join('')}</tbody>
+  </table>${filtered.length > 500 ? '<div style="padding:12px;text-align:center;color:var(--text2);font-size:12px;">Zeige 500 von ' + filtered.length.toLocaleString('de') + '</div>' : ''}`;
+}
+
+function renderOrderTable() {
+  const wrap = document.getElementById('order-table-wrap');
+  if (!orderData.length) return;
+  const q = (document.getElementById('search-order').value || '').toLowerCase();
+  const filtered = q ? orderData.filter(r =>
+    r.ref.toLowerCase().includes(q) || r.beschreibung.toLowerCase().includes(q) || r.postRef.toLowerCase().includes(q)
+  ) : orderData;
+  document.getElementById('count-order-tbl').textContent = filtered.length + ' / ' + orderData.length;
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>POST REF</th><th>Beschreibung</th><th class="text-center">Menge</th>
+      <th>REF (Teilenr)</th><th class="text-right">Preis</th><th class="text-right">Gesamt</th>
+    </tr></thead>
+    <tbody>${filtered.map(r => `<tr>
+      <td class="mono">${r.postRef}</td>
+      <td>${r.beschreibung}</td>
+      <td class="text-center">${r.menge}</td>
+      <td class="mono">${r.ref}</td>
+      <td class="text-right mono">${fmt(r.preis)}</td>
+      <td class="text-right mono">${fmt(r.gesamt)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function renderCssTable() {
+  const wrap = document.getElementById('css-table-wrap');
+  if (!cssData.length) return;
+  const q = (document.getElementById('search-css').value || '').toLowerCase();
+  const filtered = q ? cssData.filter(r =>
+    r.article.toLowerCase().includes(q) || r.description.toLowerCase().includes(q)
+  ) : cssData;
+  document.getElementById('count-css-tbl').textContent = filtered.length.toLocaleString('de') + ' / ' + cssData.length.toLocaleString('de');
+  const rows = filtered.slice(0, 500);
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Artikel</th><th>Bezeichnung</th><th class="text-right">LP</th>
+      <th class="text-right">EK</th><th class="text-right">EK Eigen</th>
+      <th class="text-right">Rabatt %</th><th class="text-right">Rabatt Eigen %</th><th class="text-right">Gewicht</th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td class="mono">${r.article}</td>
+      <td>${r.description}</td>
+      <td class="text-right mono">${fmtP(r.listPrice)}</td>
+      <td class="text-right mono">${fmtP(r.buyingPrice)}</td>
+      <td class="text-right mono">${fmtP(r.buyingPriceSelf)}</td>
+      <td class="text-right mono">${fmtP(r.discount)}</td>
+      <td class="text-right mono">${fmtP(r.discountSelf)}</td>
+      <td class="text-right mono">${r.weight}</td>
+    </tr>`).join('')}</tbody>
+  </table>${filtered.length > 500 ? '<div style="padding:12px;text-align:center;color:var(--text2);font-size:12px;">Zeige 500 von ' + filtered.length.toLocaleString('de') + '</div>' : ''}`;
+}
+
+// ── ABGLEICH ──
+function normalizeRef(ref) {
+  return String(ref).replace(/\s+/g, '').toUpperCase();
+}
+
+function runAbgleich() {
+  if (!orderData.length) { toast('Keine Bestellung geladen'); return; }
+  if (!cssData.length) { toast('Keine CSS Daten geladen'); return; }
+
+  matchData = orderData.map(order => {
+    const ref = normalizeRef(order.ref);
+    const css = cssMap[ref] || null;
+    const stamm = stammMap[ref] || null;
+
+    let status = 'missing';
+    let priceDiff = null;
+
+    if (css) {
+      status = 'found';
+      // Compare order price (Netto EK) with CSS buying_price
+      if (order.preis > 0 && css.buyingPrice > 0) {
+        priceDiff = Math.abs(order.preis - css.buyingPrice);
+        if (priceDiff > 0.01) status = 'diff';
+      }
+    }
+
+    return {
+      ...order,
+      ref,
+      css,
+      stamm,
+      status,
+      priceDiff
+    };
+  });
+
+  const found = matchData.filter(r => r.status === 'found').length;
+  const missing = matchData.filter(r => r.status === 'missing').length;
+  const diff = matchData.filter(r => r.status === 'diff').length;
+
+  document.getElementById('match-total').textContent = matchData.length;
+  document.getElementById('match-found').textContent = found;
+  document.getElementById('match-missing').textContent = missing;
+  document.getElementById('match-diff').textContent = diff;
+
+  renderMatchTable();
+  toast('Abgleich fertig: ' + found + ' gefunden, ' + missing + ' fehlen');
+}
+
+function renderMatchTable() {
+  const wrap = document.getElementById('match-table-wrap');
+  if (!matchData.length) return;
+
+  const filter = document.getElementById('filter-match').value;
+  const q = (document.getElementById('search-match').value || '').toLowerCase();
+
+  let filtered = matchData;
+  if (filter !== 'all') filtered = filtered.filter(r => r.status === filter);
+  if (q) filtered = filtered.filter(r =>
+    r.ref.toLowerCase().includes(q) || r.beschreibung.toLowerCase().includes(q)
+  );
+
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>Status</th><th>REF</th><th>Bezeichnung (Best.)</th><th class="text-center">Menge</th>
+      <th class="text-right">Preis Best.</th><th class="text-right">EK CSS</th>
+      <th class="text-right">Differenz</th><th class="text-right">LP CSS</th>
+      <th>CSS Bez.</th><th>Renault Bez.</th>
+    </tr></thead>
+    <tbody>${filtered.map(r => {
+      const badge = r.status === 'found' ? 'badge-green' : r.status === 'diff' ? 'badge-orange' : 'badge-red';
+      const label = r.status === 'found' ? 'OK' : r.status === 'diff' ? 'DIFF' : 'FEHLT';
+      return `<tr>
+        <td><span class="badge ${badge}">${label}</span></td>
+        <td class="mono">${r.ref}</td>
+        <td>${r.beschreibung}</td>
+        <td class="text-center">${r.menge}</td>
+        <td class="text-right mono">${fmt(r.preis)}</td>
+        <td class="text-right mono">${r.css ? fmtP(r.css.buyingPrice) : '—'}</td>
+        <td class="text-right mono" style="color:${r.priceDiff > 0.01 ? 'var(--orange)' : 'var(--text2)'}">${r.priceDiff !== null ? fmtP(r.priceDiff) : '—'}</td>
+        <td class="text-right mono">${r.css ? fmtP(r.css.listPrice) : '—'}</td>
+        <td>${r.css?.description || '—'}</td>
+        <td>${r.stamm?.bezeichnung || '—'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// ── EXPORTS ──
+function exportAbgleich() {
+  if (!matchData.length) { toast('Erst Abgleich starten'); return; }
+  const header = 'Status;REF;Beschreibung;Menge;Preis_Best;EK_CSS;Differenz;LP_CSS;CSS_Bez;Renault_Bez\n';
+  const rows = matchData.map(r =>
+    [r.status === 'found' ? 'OK' : r.status === 'diff' ? 'DIFF' : 'FEHLT',
+     r.ref, r.beschreibung, r.menge, fmtP(r.preis),
+     r.css ? fmtP(r.css.buyingPrice) : '', r.priceDiff !== null ? fmtP(r.priceDiff) : '',
+     r.css ? fmtP(r.css.listPrice) : '', r.css?.description || '', r.stamm?.bezeichnung || ''
+    ].join(';')
+  ).join('\n');
+  downloadFile('abgleich-export.csv', header + rows);
+  toast('Abgleich Export heruntergeladen');
+}
+
+function downloadCssExport() {
+  if (!cssData.length) { toast('Keine CSS Daten'); return; }
+  const header = 'article;list_price;buying_price;buying_price_self;discount;discount_self;description;weight;DLNR\n';
+  const rows = cssData.map(r =>
+    [r.article, fmtP(r.listPrice), fmtP(r.buyingPrice), fmtP(r.buyingPriceSelf),
+     fmtP(r.discount), fmtP(r.discountSelf), r.description, r.weight, r.dlnr].join(';')
+  ).join('\n');
+  downloadFile('css-export.csv', header + rows);
+  toast('CSS Export heruntergeladen');
+}
+
+function downloadFile(name, content) {
+  const blob = new Blob(['\ufeff' + content], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
+</script>
+</body>
+</html>
