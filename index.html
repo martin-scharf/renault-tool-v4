@@ -1067,7 +1067,7 @@ var CSS_CUSTOMER_ID = '1344';
 var CSS_CUSTOMER_ID2 = '866';
 var CSS_DLNR = '7455';
 var CSS_BATCH_SIZE = 30;
-var CSS_CORS_PROXY = 'https://corsproxy.io/?';
+var CSS_PROXY_PATH = '/api/css-proxy'; // Vercel serverless proxy
 
 function buildCssSoapRequest(articles) {
   var itemsXml = articles.map(function(ref) {
@@ -1175,11 +1175,13 @@ async function startCssQuery() {
 
     try {
       var soapBody = buildCssSoapRequest(batches[b]);
-      var response = await fetch(CSS_CORS_PROXY + encodeURIComponent(CSS_ENDPOINT), {
+      // Use own proxy (Vercel) or direct (if same origin)
+      var proxyUrl = window.location.hostname.includes('vercel') || window.location.hostname.includes('localhost')
+        ? CSS_PROXY_PATH
+        : CSS_PROXY_PATH;
+      var response = await fetch(proxyUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/soap+xml; charset=utf-8; action="DVSE.WebApp.ErpService/GetArticleInformation"'
-        },
+        headers: { 'Content-Type': 'text/xml; charset=utf-8' },
         body: soapBody
       });
 
