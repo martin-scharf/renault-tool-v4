@@ -440,7 +440,7 @@ function loadStammdaten(file) {
     try {
       stammData = parseStammdaten(e.target.result);
       stammMap = {};
-      stammData.forEach(r => stammMap[r.teilenr] = r);
+      stammData.forEach(r => stammMap[r.teilenr.replace(/\s+/g,'').toUpperCase()] = r);
       document.getElementById('box-stamm').classList.add('loaded');
       document.getElementById('status-stamm').className = 'status ok';
       document.getElementById('status-stamm').textContent = stammData.length.toLocaleString('de') + ' Teile geladen';
@@ -572,11 +572,19 @@ const TEILE_CODES = {
 
 function getOrderValidity(order) {
   const ref = normalizeRef(order.ref);
-  const stamm = stammMap[ref];
-  if (!stamm) return { status: 'unknown', label: 'Nicht in Stammdaten', color: 'gray', cls: 'row-unknown', austausch: '', code: '' };
+  // Lookup: try exact, then without leading zeros
+  let stamm = stammMap[ref];
+  if (!stamm) stamm = stammMap[ref.replace(/^0+/, '')];
+  if (!stamm) {
+    // Try adding leading zeros/spaces (Stammdaten can be 10 chars padded)
+    for (const key of Object.keys(stammMap)) {
+      if (key.replace(/^0+/, '') === ref.replace(/^0+/, '')) { stamm = stammMap[key]; break; }
+    }
+  }
+  if (!stamm) return { status: 'unknown', label: 'Nicht in Stammdaten', color: 'gray', cls: 'row-unknown', austausch: '', code: '', stammRef: '' };
   const code = stamm.code || '';
   const info = TEILE_CODES[code] || TEILE_CODES[''];
-  return { status: code ? 'problem' : 'ok', ...info, austausch: stamm.austausch || '', code };
+  return { status: code ? 'problem' : 'ok', ...info, austausch: stamm.austausch || '', code, stammRef: stamm.teilenr };
 }
 
 function renderOrderTable() {
