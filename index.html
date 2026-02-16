@@ -311,9 +311,9 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
             <div class="detail" id="mg-total-pos">0 Positionen</div>
           </div>
           <div class="card" style="border-left:3px solid var(--blue)">
-            <h3>Dein Einkauf (EK gesamt)</h3>
+            <h3>Dein EK (buying_price_self)</h3>
             <div class="num blue" id="mg-total-ek">0,00 €</div>
-            <div class="detail">Summe aller EK x Menge</div>
+            <div class="detail">Summe aller EK Eigen x Menge</div>
           </div>
           <div class="card" style="border-left:3px solid var(--green)">
             <h3>Gesamtmarge</h3>
@@ -331,9 +331,9 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
             <div class="num red" id="mg-missing">0</div>
           </div>
           <div class="card">
-            <h3>EK-Abweichung</h3>
+            <h3>Preisabweichung</h3>
             <div class="num orange" id="mg-ek-diff">0</div>
-            <div class="detail">Kundenpreis ≠ CSS EK</div>
+            <div class="detail">Best.-Preis ≠ CSS KD-Preis</div>
           </div>
           <div class="card">
             <h3>Negative Marge</h3>
@@ -359,7 +359,7 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
               <option value="all">Alle</option>
               <option value="found">In CSS (OK)</option>
               <option value="missing">Nicht in CSS</option>
-              <option value="diff">EK-Abweichung</option>
+              <option value="diff">Preisabweichung (Best. ≠ CSS)</option>
               <option value="negative">Negative Marge</option>
               <option value="high">Marge > 50%</option>
               <option value="low">Marge < 20%</option>
@@ -846,15 +846,22 @@ function runAbgleich() {
     let ekPerUnit = 0, ekGesamt = 0, margePerUnit = 0, margeGesamt = 0, margePct = 0;
     let status = 'missing';
 
+    var cssKdPreis = 0, preisMatch = false;
+
     if (css) {
-      ekPerUnit = css.buyingPrice;
+      cssKdPreis = css.buyingPrice;          // KD-Preis laut CSS Preisliste
+      ekPerUnit = css.buyingPriceSelf;        // Dein EK (buying_price_self)
       ekGesamt = ekPerUnit * menge;
       margePerUnit = kundenPreis - ekPerUnit;
       margeGesamt = margePerUnit * menge;
       margePct = kundenPreis > 0 ? (margePerUnit / kundenPreis) * 100 : 0;
 
+      // Prüfe ob KD-Preis aus Bestellung mit CSS Preisliste übereinstimmt
+      preisMatch = Math.abs(kundenPreis - cssKdPreis) < 0.01;
+
       status = 'found';
       if (margePerUnit < 0) { status = 'negative'; negCount++; }
+      if (!preisMatch) diffCount++;
       foundCount++;
     } else {
       missingCount++;
@@ -865,7 +872,8 @@ function runAbgleich() {
 
     return {
       ...order, ref, css, status,
-      ekPerUnit, ekGesamt, margePerUnit, margeGesamt, margePct, menge
+      ekPerUnit, ekGesamt, margePerUnit, margeGesamt, margePct, menge,
+      cssKdPreis, preisMatch
     };
   });
 
@@ -889,7 +897,7 @@ function runAbgleich() {
   document.getElementById('mg-total-pct').textContent = fmt(totalPct) + ' % Durchschnittsmarge';
   document.getElementById('mg-found').textContent = foundCount;
   document.getElementById('mg-missing').textContent = missingCount;
-  document.getElementById('mg-ek-diff').textContent = matchData.filter(r => r.css && Math.abs(r.margePct) < 10).length;
+  document.getElementById('mg-ek-diff').textContent = matchData.filter(r => r.css && !r.preisMatch).length;
   document.getElementById('mg-negative').textContent = matchData.filter(r => r.margePerUnit < 0).length;
 
   // Color the total margin
@@ -910,7 +918,7 @@ function renderMatchTable() {
   let filtered = matchData;
   if (filter === 'found') filtered = filtered.filter(r => r.status !== 'missing');
   else if (filter === 'missing') filtered = filtered.filter(r => r.status === 'missing');
-  else if (filter === 'diff') filtered = filtered.filter(r => r.css && Math.abs(r.margePct) < 10);
+  else if (filter === 'diff') filtered = filtered.filter(r => r.css && !r.preisMatch);
   else if (filter === 'negative') filtered = filtered.filter(r => r.margePerUnit < 0);
   else if (filter === 'high') filtered = filtered.filter(r => r.margePct > 50);
   else if (filter === 'low') filtered = filtered.filter(r => r.css && r.margePct >= 0 && r.margePct < 20);
@@ -927,7 +935,8 @@ function renderMatchTable() {
   wrap.innerHTML = '<table>'
     + '<thead><tr>'
     + '<th>Status</th><th>REF</th><th>Beschreibung</th><th class="text-center">Menge</th>'
-    + '<th class="text-right">VK/Stk</th><th class="text-right">EK/Stk</th>'
+    + '<th class="text-right">Best.-Preis</th><th class="text-right">CSS KD-Preis</th><th class="text-right">Preis-Diff</th>'
+    + '<th class="text-right">Dein EK</th>'
     + '<th class="text-right">Marge/Stk</th><th class="text-right">Marge %</th>'
     + '<th class="text-right">VK Gesamt</th><th class="text-right">EK Gesamt</th>'
     + '<th class="text-right">Marge Gesamt</th><th>CSS Bez.</th>'
@@ -943,12 +952,18 @@ function renderMatchTable() {
       var margeColor = r.margePerUnit > 0.01 ? 'var(--green)' : r.margePerUnit < -0.01 ? 'var(--red)' : 'var(--text2)';
       var rowStyle = r.margePerUnit < 0 ? ' style="background:rgba(248,113,113,.08)"' : '';
 
+      var preisDiffColor = r.css ? (r.preisMatch ? 'var(--green)' : 'var(--orange)') : 'var(--text2)';
+      var preisDiff = r.css ? r.preis - r.cssKdPreis : 0;
+      var preisDiffStr = r.css ? (r.preisMatch ? 'OK' : (preisDiff > 0 ? '+' : '') + fmt(preisDiff)) : '—';
+
       return '<tr' + rowStyle + '>'
         + '<td><span class="badge ' + badge + '">' + label + '</span></td>'
         + '<td class="mono">' + r.ref + '</td>'
         + '<td>' + r.beschreibung + '</td>'
         + '<td class="text-center">' + r.menge + '</td>'
         + '<td class="text-right mono">' + fmt(r.preis) + '</td>'
+        + '<td class="text-right mono">' + (r.css ? fmt(r.cssKdPreis) : '—') + '</td>'
+        + '<td class="text-right mono" style="color:' + preisDiffColor + ';font-weight:600">' + preisDiffStr + '</td>'
         + '<td class="text-right mono">' + (r.css ? fmt(r.ekPerUnit) : '—') + '</td>'
         + '<td class="text-right mono" style="color:' + margeColor + '">' + (r.css ? fmt(r.margePerUnit) : '—') + '</td>'
         + '<td class="text-right mono" style="color:' + margeColor + '">' + (r.css ? fmt(r.margePct) + '%' : '—') + '</td>'
@@ -967,7 +982,7 @@ function exportAbgleichExcel(filter) {
 
   var items = matchData;
   var suffix = 'Komplett';
-  if (filter === 'diff') { items = items.filter(function(r) { return r.css && Math.abs(r.margePct) < 10; }); suffix = 'Abweichungen'; }
+  if (filter === 'diff') { items = items.filter(function(r) { return r.css && !r.preisMatch; }); suffix = 'Preisabweichungen'; }
   else if (filter === 'negative') { items = items.filter(function(r) { return r.margePerUnit < 0; }); suffix = 'Verluste'; }
   else if (filter === 'missing') { items = items.filter(function(r) { return r.status === 'missing'; }); suffix = 'Nicht_in_CSS'; }
 
@@ -979,8 +994,11 @@ function exportAbgleichExcel(filter) {
       'REF (Teilenr)': r.ref,
       'Beschreibung': r.beschreibung,
       'Menge': r.menge,
-      'VK/Stk (Kundenpreis)': r.preis,
-      'EK/Stk (CSS)': r.ekPerUnit || '',
+      'Best.-Preis/Stk': r.preis,
+      'CSS KD-Preis': r.cssKdPreis || '',
+      'Preis-Diff': r.css ? Math.round((r.preis - r.cssKdPreis) * 100) / 100 : '',
+      'Preis OK': r.css ? (r.preisMatch ? 'JA' : 'NEIN') : '',
+      'Dein EK/Stk': r.ekPerUnit || '',
       'Marge/Stk': r.css ? r.margePerUnit : '',
       'Marge %': r.css ? Math.round(r.margePct * 100) / 100 : '',
       'VK Gesamt': r.gesamt,
