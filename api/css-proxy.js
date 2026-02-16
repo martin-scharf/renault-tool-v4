@@ -1,5 +1,10 @@
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -13,12 +18,19 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Read raw body
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+    const body = Buffer.concat(chunks).toString('utf-8');
+
     const response = await fetch('http://80.153.160.204:8080/dvse/Erp.asmx', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8; action="DVSE.WebApp.ErpService/GetArticleInformation"'
+        'Content-Type': 'application/soap+xml; charset=utf-8; action="DVSE.WebApp.ErpService/GetArticleInformation"',
       },
-      body: req.body
+      body: body,
     });
 
     const text = await response.text();
