@@ -1136,47 +1136,61 @@ function parseCssResponse(xmlText) {
   var ns = 'DVSE.WebApp.ErpService';
   var results = {};
 
-  // Get all Item elements from response
-  var items = doc.getElementsByTagNameNS(ns, 'Item');
-  for (var i = 0; i < items.length; i++) {
-    var item = items[i];
-    var artNr = item.getElementsByTagNameNS(ns, 'ArtikelNummer');
-    var einspArtNr = item.getElementsByTagNameNS(ns, 'EinspArtNr');
-    var availState = item.getElementsByTagNameNS(ns, 'AvailState');
+  // Get the wrapper Item (Items > Item), then iterate its direct Item children
+  var itemsEl = doc.getElementsByTagNameNS(ns, 'Items');
+  if (!itemsEl.length) return results;
+  var wrapper = itemsEl[0].getElementsByTagNameNS(ns, 'Item')[0]; // outer wrapper
+  if (!wrapper) return results;
 
-    if (!einspArtNr.length) continue;
-    var ref = einspArtNr[0].textContent.trim().toUpperCase();
+  // Only process direct child Items of the wrapper
+  var children = wrapper.children || wrapper.childNodes;
+  for (var i = 0; i < children.length; i++) {
+    var item = children[i];
+    if (item.nodeType !== 1) continue; // skip text nodes
+    var localName = item.localName || item.nodeName.split(':').pop();
+    if (localName !== 'Item') continue;
 
-    var cssNr = artNr.length ? artNr[0].textContent.trim() : '';
-    var avail = availState.length ? availState[0].textContent.trim() : '';
-
-    // Parse prices
+    // Direct child elements only (not nested)
+    var artNr = '';
+    var ref = '';
+    var avail = '';
     var ekPreis = 0, vkPreis = 0;
-    var prices = item.getElementsByTagNameNS(ns, 'Price');
-    for (var p = 0; p < prices.length; p++) {
-      var priceCode = prices[p].getElementsByTagNameNS(ns, 'PriceCode');
-      var priceValue = prices[p].getElementsByTagNameNS(ns, 'Value');
-      if (priceCode.length && priceValue.length) {
-        var code = priceCode[0].textContent.trim();
-        var val = parseFloat(priceValue[0].textContent) || 0;
-        if (code === '4') ekPreis = val;  // EK per Stück
-        if (code === '5') vkPreis = val;  // VK per Stück
+    var bestand = 0;
+
+    // Read direct fields
+    for (var c = 0; c < item.children.length; c++) {
+      var el = item.children[c];
+      var tag = el.localName || el.nodeName.split(':').pop();
+      if (tag === 'ArtikelNummer') artNr = el.textContent.trim();
+      else if (tag === 'EinspArtNr') ref = el.textContent.trim().toUpperCase();
+      else if (tag === 'AvailState') avail = el.textContent.trim();
+      else if (tag === 'Prices') {
+        var priceEls = el.getElementsByTagNameNS(ns, 'Price');
+        for (var p = 0; p < priceEls.length; p++) {
+          var codeEl = priceEls[p].getElementsByTagNameNS(ns, 'PriceCode');
+          var valEl = priceEls[p].getElementsByTagNameNS(ns, 'Value');
+          if (codeEl.length && valEl.length) {
+            var code = codeEl[0].textContent.trim();
+            var val = parseFloat(valEl[0].textContent) || 0;
+            if (code === '4') ekPreis = val;
+            if (code === '5') vkPreis = val;
+          }
+        }
+      }
+      else if (tag === 'Quantity') {
+        // Stock quantity (not RequestedQuantity)
+        var qtyInner = el.getElementsByTagNameNS(ns, 'Quantity');
+        for (var q = 0; q < qtyInner.length; q++) {
+          var qVal = qtyInner[q].getElementsByTagNameNS(ns, 'Value');
+          if (qVal.length) bestand = parseFloat(qVal[0].textContent) || 0;
+        }
       }
     }
 
-    // Parse quantity (stock)
-    var bestand = 0;
-    var quantities = item.getElementsByTagNameNS(ns, 'Quantity');
-    for (var q = 0; q < quantities.length; q++) {
-      // Skip RequestedQuantity
-      if (quantities[q].parentElement && quantities[q].parentElement.localName === 'Quantity') {
-        var qVal = quantities[q].getElementsByTagNameNS(ns, 'Value');
-        if (qVal.length) bestand = parseFloat(qVal[0].textContent) || 0;
-      }
-    }
+    if (!ref) continue;
 
     results[ref] = {
-      cssNr: cssNr,
+      cssNr: artNr,
       cssEk: ekPreis,
       cssVk: vkPreis,
       cssBestand: bestand,
