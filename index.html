@@ -412,6 +412,7 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
             </div>
             <button class="btn btn-accent" onclick="generateBestellexport()">Vorschau</button>
             <button class="btn btn-green" onclick="downloadBestellexportTxt()">TXT Export</button>
+            <button class="btn btn-outline" onclick="downloadBestellexportMissing()">Fehlende als Excel</button>
           </div>
           <div id="bexport-info" style="margin-bottom:16px">
             <div class="empty" id="empty-bexport"><div class="icon">&#128196;</div><p>Erst Bestellung hochladen + CSS Warenwirtschaft abfragen, dann hier exportieren</p></div>
@@ -1360,6 +1361,31 @@ function generateBestellexport() {
 
 function fmtPrice(v) {
   return (Math.round(parseFloat(v || 0) * 100) / 100).toFixed(2);
+}
+
+function downloadBestellexportMissing() {
+  if (!matchData.length) { toast('Erst Bestellung + CSS Abfrage starten'); return; }
+  var missing = matchData.filter(function(r) { return !r.cssNr || r.cssNr === ''; });
+  if (!missing.length) { toast('Alle Artikel haben eine CSS-Nummer'); return; }
+
+  var rows = missing.map(function(r) {
+    return {
+      'REF (Teilenr)': r.ref,
+      'POST REF': r.postRef || '',
+      'Beschreibung': r.beschreibung,
+      'Menge': r.menge,
+      'Preis': r.preis || '',
+      'Gesamt': r.gesamt || '',
+      'Grund': 'Keine CSS-Nummer vorhanden'
+    };
+  });
+
+  var ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:16},{wch:14},{wch:40},{wch:8},{wch:12},{wch:12},{wch:30}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Fehlende CSS-Nr');
+  XLSX.writeFile(wb, 'Fehlende_CSS_Artikel.xlsx');
+  toast(missing.length + ' Artikel ohne CSS-Nr exportiert');
 }
 
 function downloadBestellexportTxt() {
