@@ -916,6 +916,8 @@ function runAbgleich() {
       }
     }
     var stammBezeichnung = stamm ? stamm.bezeichnung : '';
+    if (!stamm) console.log('Stamm NICHT gefunden für REF:', ref, '| stammMap keys sample:', Object.keys(stammMap).slice(0, 5));
+    else console.log('Stamm gefunden für REF:', ref, '→', stammBezeichnung);
 
     return {
       ...order, ref, css, status, stammBezeichnung,
