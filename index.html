@@ -1311,8 +1311,12 @@ async function startCssQuery() {
 
   // Enrich matchData with CSS results
   matchData.forEach(function(r) {
-    var cssResult = totalResults[r.ref];
-    if (cssResult) {
+    var normRef = r.ref.replace(/\s+/g, '').toUpperCase();
+    var cssResult = totalResults[normRef] || totalResults[normRef.replace(/^0+/, '')] || null;
+    if (!cssResult) {
+      for (var k in totalResults) { if (k.replace(/^0+/, '') === normRef.replace(/^0+/, '')) { cssResult = totalResults[k]; break; } }
+    }
+    if (cssResult && cssResult.cssNr) {
       r.cssNr = cssResult.cssNr;
       r.cssEkLive = cssResult.cssEk;
       r.cssVkLive = cssResult.cssVk;
@@ -1321,8 +1325,8 @@ async function startCssQuery() {
     }
   });
 
-  // Retry: find refs that got no result and query again with longer delay
-  var missingRefs = matchData.filter(function(r) { return !r.cssNr; }).map(function(r) { return r.ref; }).filter(Boolean);
+  // Retry: find refs that got no result or empty cssNr
+  var missingRefs = matchData.filter(function(r) { return !r.cssNr || r.cssNr === ''; }).map(function(r) { return r.ref; }).filter(Boolean);
   if (missingRefs.length > 0 && missingRefs.length < allRefs.length) {
     statusEl.textContent = 'Retry: ' + missingRefs.length + ' fehlende Artikel...';
     for (var m = 0; m < missingRefs.length; m++) {
