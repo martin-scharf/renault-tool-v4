@@ -1415,12 +1415,10 @@ function downloadBestellexportBE() {
 
   // Block 3: Artikel-Zeilen
   bexportRows.forEach(function(r) {
-    // EK eigen = from Margenanalyse "Dein EK" (ekPerUnit) or CSS Export buying_price_self
-    var ekEigen = fmtPrice(r.ekPerUnit || r.cssEkLive || 0);
-    // Brutto-VK = Listenpreis (aus Stammdaten brutto oder CSS VK)
-    var bruttoVk = fmtPrice(r.preis || r.cssVkLive || 0);
+    // Lieferanten-EK = Brutto-VK = EK des Lieferanten
+    var lief_ek = fmtPrice(r.ekPerUnit || r.cssEkLive || 0);
     var bez = r.stammBezeichnung || r.beschreibung;
-    lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + ekEigen + ';' + bruttoVk + ';;0;');
+    lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + lief_ek + ';' + lief_ek + ';;0;');
   });
 
   var content = lines.join('\n');
