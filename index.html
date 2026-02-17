@@ -725,7 +725,13 @@ function renderOrderTable() {
   const container = document.getElementById('order-sections');
   if (!orderData.length || !stammData.length) return;
 
-  enrichedOrderData = orderData.map(r => ({ ...r, validity: getOrderValidity(r) }));
+  enrichedOrderData = orderData.map(r => {
+    const validity = getOrderValidity(r);
+    const ref = normalizeRef(r.ref);
+    let stamm = stammMap[ref] || stammMap[ref.replace(/^0+/, '')] || null;
+    if (!stamm) { for (const key of Object.keys(stammMap)) { if (key.replace(/^0+/, '') === ref.replace(/^0+/, '')) { stamm = stammMap[key]; break; } } }
+    return { ...r, validity, stammBezeichnung: stamm ? stamm.bezeichnung : '' };
+  });
 
   // Count per category
   const counts = { ok: 0, '1': 0, '2': 0, '3': 0, '4': 0, unknown: 0 };
@@ -908,19 +914,9 @@ function runAbgleich() {
     totalVK += kundenGesamt;
     totalEK += ekGesamt;
 
-    // Stammdaten-Bezeichnung (RDAGTK) hat Vorrang
-    var stamm = stammMap[ref] || stammMap[ref.replace(/^0+/, '')] || null;
-    if (!stamm) {
-      for (const key of Object.keys(stammMap)) {
-        if (key.replace(/^0+/, '') === ref.replace(/^0+/, '')) { stamm = stammMap[key]; break; }
-      }
-    }
-    var stammBezeichnung = stamm ? stamm.bezeichnung : '';
-    if (!stamm) console.log('Stamm NICHT gefunden für REF:', ref, '| stammMap keys sample:', Object.keys(stammMap).slice(0, 5));
-    else console.log('Stamm gefunden für REF:', ref, '→', stammBezeichnung);
-
+    // stammBezeichnung kommt bereits aus enrichedOrderData
     return {
-      ...order, ref, css, status, stammBezeichnung,
+      ...order, ref, css, status,
       ekPerUnit, ekGesamt, margePerUnit, margeGesamt, margePct, menge,
       cssKdPreis, preisMatch
     };
