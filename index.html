@@ -1409,7 +1409,7 @@ function downloadBestellexportTxt() {
 
   // Block 1: Beleg-Header
   lines.push('Online-ID;Belegart;Beleginfos;Kundennummer/Lieferantennummer;Lieferdatum;Liefertour;Versandart;Verkäufer-Nr.;L-Anschrift;L-Adresse;L-PLZ;L-Ort;L-Land');
-  lines.push(randId + ';RU-BR;' + beleginfos + ';866;' + lieferdatum + ';;;6;;;;;');
+  lines.push(randId + ';RU-LI;' + beleginfos + ';866;' + lieferdatum + ';;;6;;;;;');
 
   // Block 2: Artikel-Header
   lines.push('Artikel-Nr.;Artikelbezeichnung;Ergänzung-1;Ergänzung-2;Menge;Lieferanten-EK;Brutto-VK;Netto-VK;Rabatt;Textzeile');
