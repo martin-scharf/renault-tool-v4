@@ -1269,6 +1269,15 @@ async function startCssQuery() {
   btn.disabled = true;
   btn.textContent = 'Abfrage läuft...';
 
+  // Reset all CSS data before fresh query
+  matchData.forEach(function(r) {
+    r.cssNr = '';
+    r.cssEkLive = 0;
+    r.cssVkLive = 0;
+    r.cssBestand = 0;
+    r.cssVerfuegbar = '';
+  });
+
   // Collect all unique REFs from matchData
   var allRefs = matchData.map(function(r) { return r.ref; }).filter(function(r) { return r; });
   var batches = [];
