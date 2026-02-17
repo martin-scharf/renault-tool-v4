@@ -611,7 +611,7 @@ function loadCssData(file) {
           dlnr: cols[8]?.trim() || '7455'
         };
         cssData.push(row);
-        cssMap[row.article] = row;
+        cssMap[row.article.replace(/\s+/g,'').toUpperCase()] = row;
       }
       document.getElementById('box-css').classList.add('loaded');
       document.getElementById('status-css').className = 'status ok';
