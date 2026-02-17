@@ -1377,16 +1377,51 @@ function loadBestellexportFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-function generateBestellexport() {
+async function generateBestellexport() {
   // Use matchData (from Margenanalyse) or bexportFileData (from direct upload)
   var sourceData = matchData.length ? matchData : bexportFileData;
   if (!sourceData.length) { toast('Erst Bestellung hochladen oder Margenanalyse starten'); return; }
+
+  // Auto CSS query: fetch CSS-Nr + EK for all refs that don't have it yet
+  var needQuery = sourceData.filter(function(r) { return !r.cssNr; });
+  if (needQuery.length) {
+    toast('CSS Abfrage für ' + needQuery.length + ' Artikel...');
+    var refs = needQuery.map(function(r) { return r.ref; }).filter(Boolean);
+    for (var i = 0; i < refs.length; i++) {
+      try {
+        var soapBody = buildCssSoapRequest([refs[i]]);
+        var response = await fetch(CSS_PROXY_PATH, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+          body: soapBody
+        });
+        if (response.ok) {
+          var xmlText = await response.text();
+          var result = parseCssResponse(xmlText);
+          var normRef = refs[i].replace(/\s+/g, '').toUpperCase();
+          if (result[normRef]) {
+            // Enrich sourceData
+            sourceData.forEach(function(r) {
+              if (r.ref.replace(/\s+/g, '').toUpperCase() === normRef) {
+                r.cssNr = result[normRef].cssNr;
+                r.cssEkLive = result[normRef].cssEk;
+                r.cssVkLive = result[normRef].cssVk;
+                r.cssBestand = result[normRef].cssBestand;
+              }
+            });
+          }
+        }
+      } catch(err) { console.error('CSS query error for', refs[i], err); }
+      if (i < refs.length - 1) await new Promise(function(r) { setTimeout(r, 300); });
+    }
+    toast('CSS Abfrage fertig');
+  }
 
   // Only items that have CSS data (cssNr)
   var withCss = sourceData.filter(function(r) { return r.cssNr && r.cssNr !== ''; });
   var skipped = sourceData.length - withCss.length;
 
-  if (!withCss.length) { toast('Keine Artikel mit CSS-Nummer gefunden. Erst CSS Warenwirtschaft abfragen!'); return; }
+  if (!withCss.length) { toast('Keine Artikel mit CSS-Nummer gefunden'); return; }
 
   bexportRows = withCss;
   document.getElementById('empty-bexport').style.display = 'none';
@@ -1399,12 +1434,6 @@ function generateBestellexport() {
   var html = '<table><thead><tr><th>Artikel-Nr. (CSS)</th><th>Bezeichnung</th><th>Menge</th><th>Lieferanten-EK</th><th>Brutto-VK</th><th>Netto-VK</th><th>Rabatt</th></tr></thead><tbody>';
   withCss.forEach(function(r) {
     var ek = r.cssEkLive || r.ekPerUnit || 0;
-    if (!ek) {
-      var normRef = r.ref.replace(/\s+/g, '').toUpperCase();
-      var st = stammMap[normRef] || stammMap[normRef.replace(/^0+/, '')] || null;
-      if (!st) { for (var k in stammMap) { if (k.replace(/^0+/, '') === normRef.replace(/^0+/, '')) { st = stammMap[k]; break; } } }
-      if (st) ek = st.brutto;
-    }
     var netto = r.preis || 0;
     html += '<tr>'
       + '<td class="mono">' + r.cssNr + '</td>'
@@ -1468,16 +1497,8 @@ function downloadBestellexportBE() {
 
   // Block 3: Artikel-Zeilen
   bexportRows.forEach(function(r) {
-    // Lieferanten-EK = Brutto-VK = EK des Lieferanten
-    // EK Priorität: 1) CSS SOAP EK Live, 2) CSS Export buyingPriceSelf, 3) Stammdaten Brutto
+    // Lieferanten-EK = echter EK aus CSS SOAP API (PriceCode 4)
     var lief_ek = r.cssEkLive || r.ekPerUnit || 0;
-    // Fallback: Stammdaten Brutto
-    if (!lief_ek) {
-      var normRef = r.ref.replace(/\s+/g, '').toUpperCase();
-      var stamm = stammMap[normRef] || stammMap[normRef.replace(/^0+/, '')] || null;
-      if (!stamm) { for (var k in stammMap) { if (k.replace(/^0+/, '') === normRef.replace(/^0+/, '')) { stamm = stammMap[k]; break; } } }
-      if (stamm) lief_ek = stamm.brutto;
-    }
     var bez = r.stammBezeichnung || r.beschreibung;
     lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + fmtPrice(lief_ek) + ';' + fmtPrice(lief_ek) + ';;0;');
   });
@@ -1519,14 +1540,7 @@ function downloadBestellexportTxt() {
 
   // Block 3: Artikel-Zeilen
   bexportRows.forEach(function(r) {
-    var ekVal = r.cssEkLive || r.ekPerUnit || 0;
-    if (!ekVal) {
-      var normRef = r.ref.replace(/\s+/g, '').toUpperCase();
-      var st = stammMap[normRef] || stammMap[normRef.replace(/^0+/, '')] || null;
-      if (!st) { for (var k in stammMap) { if (k.replace(/^0+/, '') === normRef.replace(/^0+/, '')) { st = stammMap[k]; break; } } }
-      if (st) ekVal = st.brutto;
-    }
-    var ek = fmtPrice(ekVal);
+    var ek = fmtPrice(r.cssEkLive || r.ekPerUnit || 0);
     var netto = fmtPrice(r.preis || 0);
     var bez = r.stammBezeichnung || r.beschreibung;
     lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + ek + ';' + netto + ';' + netto + ';0;');
