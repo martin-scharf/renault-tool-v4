@@ -1303,9 +1303,9 @@ async function startCssQuery() {
       errors++;
     }
 
-    // Small delay between batches
+    // Delay between batches (800ms to avoid overloading CSS API)
     if (b < batches.length - 1) {
-      await new Promise(function(r) { setTimeout(r, 500); });
+      await new Promise(function(r) { setTimeout(r, 800); });
     }
   }
 
@@ -1320,6 +1320,39 @@ async function startCssQuery() {
       r.cssVerfuegbar = cssResult.cssVerfuegbar;
     }
   });
+
+  // Retry: find refs that got no result and query again with longer delay
+  var missingRefs = matchData.filter(function(r) { return !r.cssNr; }).map(function(r) { return r.ref; }).filter(Boolean);
+  if (missingRefs.length > 0 && missingRefs.length < allRefs.length) {
+    statusEl.textContent = 'Retry: ' + missingRefs.length + ' fehlende Artikel...';
+    for (var m = 0; m < missingRefs.length; m++) {
+      try {
+        var retrySoap = buildCssSoapRequest([missingRefs[m]]);
+        var retryResp = await fetch(CSS_PROXY_PATH, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+          body: retrySoap
+        });
+        if (retryResp.ok) {
+          var retryXml = await retryResp.text();
+          var retryResult = parseCssResponse(retryXml);
+          var normRef = missingRefs[m].replace(/\s+/g, '').toUpperCase();
+          if (retryResult[normRef]) {
+            matchData.forEach(function(r) {
+              if (r.ref.replace(/\s+/g, '').toUpperCase() === normRef && !r.cssNr) {
+                r.cssNr = retryResult[normRef].cssNr;
+                r.cssEkLive = retryResult[normRef].cssEk;
+                r.cssVkLive = retryResult[normRef].cssVk;
+                r.cssBestand = retryResult[normRef].cssBestand;
+                r.cssVerfuegbar = retryResult[normRef].cssVerfuegbar;
+              }
+            });
+          }
+        }
+      } catch(e) { console.error('Retry error:', missingRefs[m], e); }
+      await new Promise(function(r) { setTimeout(r, 1500); }); // 1.5s between retries
+    }
+  }
 
   cssQueryRunning = false;
   btn.disabled = false;
