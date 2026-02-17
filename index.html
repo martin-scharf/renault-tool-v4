@@ -1355,7 +1355,8 @@ var bexportRows = [];
 var bexportFileData = []; // from direct upload in Bestellexport tab
 
 function loadBestellexportFile(file) {
-  if (!file) return;
+  if (!file) { toast('Keine Datei ausgewählt'); return; }
+  toast('Lade: ' + file.name);
   document.getElementById('bexport-filename').textContent = file.name;
   var reader = new FileReader();
   reader.onload = function(e) {
@@ -1390,8 +1391,25 @@ function loadBestellexportFile(file) {
 }
 
 async function generateBestellexport() {
-  // Use matchData (from Margenanalyse) or bexportFileData (from direct upload)
-  var sourceData = matchData.length ? matchData : bexportFileData;
+  // Use bexportFileData (from direct upload) or matchData filtered by status toggles
+  var sourceData;
+  if (bexportFileData.length) {
+    sourceData = bexportFileData;
+  } else if (matchData.length) {
+    // Apply status filter from Margenanalyse toggle buttons
+    var active = [];
+    document.querySelectorAll('.status-toggle').forEach(function(b) {
+      if (b.classList.contains('active')) active.push(b.getAttribute('data-status'));
+    });
+    if (active.length && active.length < 5) {
+      sourceData = matchData.filter(function(r) { return active.indexOf(getItemStatus(r)) !== -1; });
+      toast('Filter aktiv: ' + active.join(', ') + ' (' + sourceData.length + ' Artikel)');
+    } else {
+      sourceData = matchData;
+    }
+  } else {
+    sourceData = [];
+  }
   if (!sourceData.length) { toast('Erst Bestellung hochladen oder Margenanalyse starten'); return; }
 
   // Auto CSS query: fetch CSS-Nr + EK for all refs that don't have it yet
@@ -1473,7 +1491,7 @@ function fmtPrice(v) {
 }
 
 function downloadBestellexportMissing() {
-  var sourceData = matchData.length ? matchData : bexportFileData;
+  var sourceData = bexportFileData.length ? bexportFileData : matchData;
   if (!sourceData.length) { toast('Erst Bestellung hochladen oder Margenanalyse starten'); return; }
   var missing = sourceData.filter(function(r) { return !r.cssNr || r.cssNr === ''; });
   if (!missing.length) { toast('Alle Artikel haben eine CSS-Nummer'); return; }
