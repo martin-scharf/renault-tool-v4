@@ -908,8 +908,17 @@ function runAbgleich() {
     totalVK += kundenGesamt;
     totalEK += ekGesamt;
 
+    // Stammdaten-Bezeichnung (RDAGTK) hat Vorrang
+    var stamm = stammMap[ref] || stammMap[ref.replace(/^0+/, '')] || null;
+    if (!stamm) {
+      for (const key of Object.keys(stammMap)) {
+        if (key.replace(/^0+/, '') === ref.replace(/^0+/, '')) { stamm = stammMap[key]; break; }
+      }
+    }
+    var stammBezeichnung = stamm ? stamm.bezeichnung : '';
+
     return {
-      ...order, ref, css, status,
+      ...order, ref, css, status, stammBezeichnung,
       ekPerUnit, ekGesamt, margePerUnit, margeGesamt, margePct, menge,
       cssKdPreis, preisMatch
     };
@@ -1021,7 +1030,7 @@ function renderMatchTable() {
           + '<td class="text-right mono">' + (r.cssBestand !== undefined ? r.cssBestand : '—') + '</td>'
           + '<td style="color:' + verfColor + '">' + (verfMap[r.cssVerfuegbar] || r.cssVerfuegbar || '—') + '</td>';
       }
-      row += '<td>' + (r.css ? r.css.description : '—') + '</td>'
+      row += '<td>' + (r.stammBezeichnung || r.beschreibung) + '</td>'
         + '</tr>';
       return row;
     }).join('')
@@ -1077,7 +1086,7 @@ function exportAbgleichExcel(filter, customItems) {
     return {
       'POST REF': r.postRef,
       'REF (Teilenr)': r.ref,
-      'Beschreibung': r.beschreibung,
+      'Beschreibung': r.stammBezeichnung || r.beschreibung,
       'Menge': r.menge,
       'Best.-Preis/Stk': r.preis,
       'CSS KD-Preis': r.cssKdPreis || '',
@@ -1094,7 +1103,7 @@ function exportAbgleichExcel(filter, customItems) {
       'CSS EK Live': r.cssEkLive || '',
       'Bestand': r.cssBestand !== undefined ? r.cssBestand : '',
       'Verfügbar': r.cssVerfuegbar || '',
-      'CSS Bezeichnung': r.css ? r.css.description : ''
+      'Bezeichnung (Stammdaten)': r.stammBezeichnung || r.beschreibung
     };
   });
 
@@ -1115,7 +1124,7 @@ function exportAbgleichExcel(filter, customItems) {
     'EK Gesamt': totalEK,
     'Marge Gesamt': totalMarge,
     'Status': '',
-    'CSS Bezeichnung': ''
+    'Bezeichnung (Stammdaten)': ''
   });
 
   var ws = XLSX.utils.json_to_sheet(rows);
@@ -1347,7 +1356,7 @@ function generateBestellexport() {
     var netto = r.preis || 0;
     html += '<tr>'
       + '<td class="mono">' + r.cssNr + '</td>'
-      + '<td>' + (r.css ? r.css.description : r.beschreibung) + '</td>'
+      + '<td>' + (r.stammBezeichnung || r.beschreibung) + '</td>'
       + '<td>' + r.menge + '</td>'
       + '<td>' + fmtPrice(ek) + '</td>'
       + '<td>' + fmtPrice(netto) + '</td>'
@@ -1373,7 +1382,7 @@ function downloadBestellexportMissing() {
     return {
       'REF (Teilenr)': r.ref,
       'POST REF': r.postRef || '',
-      'Beschreibung': r.beschreibung,
+      'Beschreibung': r.stammBezeichnung || r.beschreibung,
       'Menge': r.menge,
       'Preis': r.preis || '',
       'Gesamt': r.gesamt || '',
@@ -1410,7 +1419,7 @@ function downloadBestellexportBE() {
     var ekEigen = fmtPrice(r.ekPerUnit || r.cssEkLive || 0);
     // Brutto-VK = Listenpreis (aus Stammdaten brutto oder CSS VK)
     var bruttoVk = fmtPrice(r.preis || r.cssVkLive || 0);
-    var bez = r.css ? r.css.description : r.beschreibung;
+    var bez = r.stammBezeichnung || r.beschreibung;
     lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + ekEigen + ';' + bruttoVk + ';;0;');
   });
 
@@ -1453,7 +1462,7 @@ function downloadBestellexportTxt() {
   bexportRows.forEach(function(r) {
     var ek = fmtPrice(r.cssEkLive || r.ekPerUnit || 0);
     var netto = fmtPrice(r.preis || 0);
-    var bez = r.css ? r.css.description : r.beschreibung;
+    var bez = r.stammBezeichnung || r.beschreibung;
     lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + ek + ';' + netto + ';' + netto + ';0;');
   });
 
