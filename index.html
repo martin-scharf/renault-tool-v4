@@ -1050,9 +1050,12 @@ function renderMatchTable() {
 function toggleStatus(btn) {
   btn.classList.toggle('active');
   if (!btn.classList.contains('active')) {
-    btn.style.opacity = '0.3';
+    btn.style.opacity = '0.25';
+    btn.style.textDecoration = 'line-through';
+    btn.style.position = 'relative';
   } else {
     btn.style.opacity = '1';
+    btn.style.textDecoration = 'none';
   }
 }
 
@@ -1067,11 +1070,19 @@ function getItemStatus(r) {
 function exportAbgleichFiltered() {
   if (!matchData.length) { toast('Erst Margenanalyse starten'); return; }
   var active = [];
-  document.querySelectorAll('.status-toggle.active').forEach(function(b) {
-    active.push(b.getAttribute('data-status'));
+  var btns = document.querySelectorAll('.status-toggle');
+  btns.forEach(function(b) {
+    if (b.classList.contains('active')) {
+      active.push(b.getAttribute('data-status'));
+    }
   });
+  console.log('Active filters:', active);
   if (!active.length) { toast('Mindestens einen Status auswählen'); return; }
-  var items = matchData.filter(function(r) { return active.indexOf(getItemStatus(r)) !== -1; });
+  var items = matchData.filter(function(r) {
+    var st = getItemStatus(r);
+    return active.indexOf(st) !== -1;
+  });
+  console.log('Filtered items:', items.length, 'of', matchData.length);
   if (!items.length) { toast('Keine Einträge für gewählte Filter'); return; }
   exportAbgleichExcel('custom', items);
 }
