@@ -411,7 +411,8 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
               <input type="text" id="bexport-auftragnr" placeholder="z.B. 4500012345" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;width:280px">
             </div>
             <button class="btn btn-accent" onclick="generateBestellexport()">Vorschau</button>
-            <button class="btn btn-green" onclick="downloadBestellexportTxt()">TXT Export</button>
+            <button class="btn btn-green" onclick="downloadBestellexportTxt()">TXT Export KD</button>
+            <button class="btn" style="background:var(--blue);color:#000" onclick="downloadBestellexportBE()">TXT Export Bestellung</button>
             <button class="btn btn-outline" onclick="downloadBestellexportMissing()">Fehlende als Excel</button>
           </div>
           <div id="bexport-info" style="margin-bottom:16px">
@@ -1386,6 +1387,40 @@ function downloadBestellexportMissing() {
   XLSX.utils.book_append_sheet(wb, ws, 'Fehlende CSS-Nr');
   XLSX.writeFile(wb, 'Fehlende_CSS_Artikel.xlsx');
   toast(missing.length + ' Artikel ohne CSS-Nr exportiert');
+}
+
+function downloadBestellexportBE() {
+  if (!bexportRows.length) { generateBestellexport(); if (!bexportRows.length) return; }
+
+  // Generate random Online-ID
+  var randId = 'B' + Math.floor(Math.random() * 9000 + 1000) + 'MB' + Math.floor(Math.random() * 90000 + 10000);
+
+  var lines = [];
+
+  // Block 1: Beleg-Header
+  lines.push('Online-ID;Belegart;Beleginfos;Kundennummer/Lieferantennummer;Lieferdatum;Liefertour;Versandart;Verkäufer-Nr.;L-Anschrift;L-Adresse;L-PLZ;L-Ort;L-Land');
+  lines.push(randId + ';BE;;60;;;;6;;;;;');
+
+  // Block 2: Artikel-Header
+  lines.push('Artikel-Nr.;Artikelbezeichnung;Ergänzung-1;Ergänzung-2;Menge;Lieferanten-EK;Brutto-VK;Netto-VK;Rabatt;Textzeile');
+
+  // Block 3: Artikel-Zeilen
+  bexportRows.forEach(function(r) {
+    // EK eigen = from Margenanalyse "Dein EK" (ekPerUnit) or CSS Export buying_price_self
+    var ekEigen = fmtPrice(r.ekPerUnit || r.cssEkLive || 0);
+    // Brutto-VK = Listenpreis (aus Stammdaten brutto oder CSS VK)
+    var bruttoVk = fmtPrice(r.preis || r.cssVkLive || 0);
+    var bez = r.css ? r.css.description : r.beschreibung;
+    lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + ekEigen + ';' + bruttoVk + ';;0;');
+  });
+
+  var content = lines.join('\n');
+  var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'BEB' + randId.substring(1) + '.txt';
+  a.click();
+  toast('TXT Export Bestellung erstellt');
 }
 
 function downloadBestellexportTxt() {
