@@ -1433,7 +1433,13 @@ async function generateBestellexport() {
   // Render preview table
   var html = '<table><thead><tr><th>Artikel-Nr. (CSS)</th><th>Bezeichnung</th><th>Menge</th><th>Lieferanten-EK</th><th>Brutto-VK</th><th>Netto-VK</th><th>Rabatt</th></tr></thead><tbody>';
   withCss.forEach(function(r) {
-    var ek = r.cssEkLive || r.ekPerUnit || 0;
+    // EK aus CSS/ERP Import (buying_price_self)
+    var ek = 0;
+    var nRef = r.ref.replace(/\s+/g, '').toUpperCase();
+    var cRow = cssMap[nRef] || cssMap[nRef.replace(/^0+/, '')] || null;
+    if (!cRow) { for (var k in cssMap) { if (k.replace(/^0+/, '') === nRef.replace(/^0+/, '')) { cRow = cssMap[k]; break; } } }
+    if (cRow) ek = cRow.buyingPriceSelf;
+    if (!ek) ek = r.cssEkLive || r.ekPerUnit || 0;
     var netto = r.preis || 0;
     html += '<tr>'
       + '<td class="mono">' + r.cssNr + '</td>'
@@ -1497,8 +1503,13 @@ function downloadBestellexportBE() {
 
   // Block 3: Artikel-Zeilen
   bexportRows.forEach(function(r) {
-    // Lieferanten-EK = echter EK aus CSS SOAP API (PriceCode 4)
-    var lief_ek = r.cssEkLive || r.ekPerUnit || 0;
+    // Lieferanten-EK aus CSS/ERP Import (buying_price_self)
+    var lief_ek = 0;
+    var normRef = r.ref.replace(/\s+/g, '').toUpperCase();
+    var cssRow = cssMap[normRef] || cssMap[normRef.replace(/^0+/, '')] || null;
+    if (!cssRow) { for (var k in cssMap) { if (k.replace(/^0+/, '') === normRef.replace(/^0+/, '')) { cssRow = cssMap[k]; break; } } }
+    if (cssRow) lief_ek = cssRow.buyingPriceSelf;
+    if (!lief_ek) lief_ek = r.cssEkLive || r.ekPerUnit || 0;
     var bez = r.stammBezeichnung || r.beschreibung;
     lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + fmtPrice(lief_ek) + ';' + fmtPrice(lief_ek) + ';;0;');
   });
@@ -1540,7 +1551,14 @@ function downloadBestellexportTxt() {
 
   // Block 3: Artikel-Zeilen
   bexportRows.forEach(function(r) {
-    var ek = fmtPrice(r.cssEkLive || r.ekPerUnit || 0);
+    // EK aus CSS/ERP Import (buying_price_self)
+    var ekVal = 0;
+    var normRef2 = r.ref.replace(/\s+/g, '').toUpperCase();
+    var cssRow2 = cssMap[normRef2] || cssMap[normRef2.replace(/^0+/, '')] || null;
+    if (!cssRow2) { for (var k in cssMap) { if (k.replace(/^0+/, '') === normRef2.replace(/^0+/, '')) { cssRow2 = cssMap[k]; break; } } }
+    if (cssRow2) ekVal = cssRow2.buyingPriceSelf;
+    if (!ekVal) ekVal = r.cssEkLive || r.ekPerUnit || 0;
+    var ek = fmtPrice(ekVal);
     var netto = fmtPrice(r.preis || 0);
     var bez = r.stammBezeichnung || r.beschreibung;
     lines.push(r.cssNr + ';' + bez + ';;;' + r.menge + ';' + ek + ';' + netto + ';' + netto + ';0;');
