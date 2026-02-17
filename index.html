@@ -410,13 +410,22 @@ footer { text-align:center; padding:20px; font-size:12px; color:var(--text2); bo
               <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Auftragsbestellnummer (Lieferant)</label>
               <input type="text" id="bexport-auftragnr" placeholder="z.B. 4500012345" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;width:280px">
             </div>
+            <div>
+              <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Bestelldatei (Excel)</label>
+              <div class="upload-box" id="box-bexport" onclick="document.getElementById('file-bexport').click()" style="padding:12px 20px;min-height:auto;cursor:pointer">
+                <span id="bexport-filename" style="font-size:13px;color:var(--text2)">Datei wählen oder hierher ziehen</span>
+                <input type="file" id="file-bexport" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadBestellexportFile(this.files[0])">
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
             <button class="btn btn-accent" onclick="generateBestellexport()">Vorschau</button>
             <button class="btn btn-green" onclick="downloadBestellexportTxt()">TXT Export KD</button>
             <button class="btn" style="background:var(--blue);color:#000" onclick="downloadBestellexportBE()">TXT Export Bestellung</button>
             <button class="btn btn-outline" onclick="downloadBestellexportMissing()">Fehlende als Excel</button>
           </div>
           <div id="bexport-info" style="margin-bottom:16px">
-            <div class="empty" id="empty-bexport"><div class="icon">&#128196;</div><p>Erst Bestellung hochladen + CSS Warenwirtschaft abfragen, dann hier exportieren</p></div>
+            <div class="empty" id="empty-bexport"><div class="icon">&#128196;</div><p>Excel hochladen oder Bestellung + CSS Abfrage aus Margenanalyse nutzen</p></div>
           </div>
           <div id="bexport-preview" style="display:none">
             <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
@@ -447,6 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDrop('box-stamm', loadStammdaten);
   setupDrop('box-order', loadBestellung);
   setupDrop('box-css', loadCssData);
+  setupDrop('box-bexport', loadBestellexportFile);
 });
 
 // ── AUTH ──
@@ -1330,13 +1340,51 @@ function downloadFile(name, content) {
 
 // ── BESTELLEXPORT (CSS → TXT) ──
 var bexportRows = [];
+var bexportFileData = []; // from direct upload in Bestellexport tab
+
+function loadBestellexportFile(file) {
+  if (!file) return;
+  document.getElementById('bexport-filename').textContent = file.name;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var data = new Uint8Array(e.target.result);
+    var wb = XLSX.read(data, { type: 'array' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var json = XLSX.utils.sheet_to_json(ws);
+
+    bexportFileData = json.filter(function(r) { return r['REF'] || r['ref'] || r['Ref']; }).map(function(r) {
+      var ref = String(r['REF'] || r['ref'] || r['Ref'] || '').trim();
+      var normRef = ref.replace(/\s+/g, '').toUpperCase();
+      // Lookup Stammdaten
+      var stamm = stammMap[normRef] || stammMap[normRef.replace(/^0+/, '')] || null;
+      if (!stamm) { for (var key in stammMap) { if (key.replace(/^0+/, '') === normRef.replace(/^0+/, '')) { stamm = stammMap[key]; break; } } }
+      return {
+        postRef: r['POST REF'] || r['post ref'] || '',
+        beschreibung: r['BESCHREIBUNG'] || r['beschreibung'] || r['Beschreibung'] || '',
+        stammBezeichnung: stamm ? stamm.bezeichnung : '',
+        menge: parseInt(r['MENGE'] || r['menge'] || r['Menge'] || 0),
+        ref: ref,
+        preis: parseFloat(r['PREIS'] || r['preis'] || r['Preis'] || 0),
+        gesamt: parseFloat(r['GESAMT'] || r['gesamt'] || r['Gesamt'] || 0)
+      };
+    });
+
+    toast(bexportFileData.length + ' Positionen geladen');
+    document.getElementById('empty-bexport').style.display = 'none';
+    // Auto-generate preview
+    generateBestellexport();
+  };
+  reader.readAsArrayBuffer(file);
+}
 
 function generateBestellexport() {
-  if (!matchData.length) { toast('Erst Bestellung hochladen + Margenanalyse starten'); return; }
+  // Use matchData (from Margenanalyse) or bexportFileData (from direct upload)
+  var sourceData = matchData.length ? matchData : bexportFileData;
+  if (!sourceData.length) { toast('Erst Bestellung hochladen oder Margenanalyse starten'); return; }
 
   // Only items that have CSS data (cssNr)
-  var withCss = matchData.filter(function(r) { return r.cssNr && r.cssNr !== ''; });
-  var skipped = matchData.length - withCss.length;
+  var withCss = sourceData.filter(function(r) { return r.cssNr && r.cssNr !== ''; });
+  var skipped = sourceData.length - withCss.length;
 
   if (!withCss.length) { toast('Keine Artikel mit CSS-Nummer gefunden. Erst CSS Warenwirtschaft abfragen!'); return; }
 
@@ -1372,8 +1420,9 @@ function fmtPrice(v) {
 }
 
 function downloadBestellexportMissing() {
-  if (!matchData.length) { toast('Erst Bestellung + CSS Abfrage starten'); return; }
-  var missing = matchData.filter(function(r) { return !r.cssNr || r.cssNr === ''; });
+  var sourceData = matchData.length ? matchData : bexportFileData;
+  if (!sourceData.length) { toast('Erst Bestellung hochladen oder Margenanalyse starten'); return; }
+  var missing = sourceData.filter(function(r) { return !r.cssNr || r.cssNr === ''; });
   if (!missing.length) { toast('Alle Artikel haben eine CSS-Nummer'); return; }
 
   var rows = missing.map(function(r) {
